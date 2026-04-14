@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from hashbidder.client import (
+    AccountBalance,
     ApiError,
     BidId,
     BidStatus,
@@ -45,6 +46,12 @@ DEFAULT_MARKET_SETTINGS = MarketSettings(
     min_bid_price_decrease_period=timedelta(seconds=600),
     min_bid_speed_limit_decrease_period=timedelta(seconds=600),
     price_tick=DEFAULT_PRICE_TICK,
+)
+
+DEFAULT_ACCOUNT_BALANCE = AccountBalance(
+    available_sat=Sats(10_000_000_000),
+    blocked_sat=Sats(0),
+    total_sat=Sats(10_000_000_000),
 )
 
 
@@ -108,6 +115,7 @@ class FakeClient:
         current_bids: tuple[UserBid, ...] = (),
         errors: dict[tuple[str, str], list[ApiError]] | None = None,
         market_settings: MarketSettings = DEFAULT_MARKET_SETTINGS,
+        account_balance: AccountBalance = DEFAULT_ACCOUNT_BALANCE,
     ) -> None:
         """Initialize with optional canned data and error injection."""
         self._orderbook = orderbook or OrderBook(bids=(), asks=())
@@ -115,11 +123,16 @@ class FakeClient:
         self._next_id = 1
         self._errors = errors or {}
         self._market_settings = market_settings
+        self._account_balance = account_balance
         self.calls: list[tuple[str, ...]] = []
 
     def get_market_settings(self) -> MarketSettings:
         """Return the canned market settings."""
         return self._market_settings
+
+    def get_account_balance(self) -> AccountBalance:
+        """Return the canned account balance."""
+        return self._account_balance
 
     def _maybe_raise(self, method: str, key: str) -> None:
         errs = self._errors.get((method, key))

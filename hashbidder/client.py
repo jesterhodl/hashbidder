@@ -21,6 +21,7 @@ from hashbidder.domain.user_bid import BidId, BidStatus, UserBid
 
 __all__ = [
     "API_BASE",
+    "AccountBalance",
     "ApiError",
     "AskItem",
     "BidId",
@@ -95,6 +96,15 @@ class MarketSettings:
 
 
 @dataclass(frozen=True)
+class AccountBalance:
+    """The authenticated account's balance."""
+
+    available_sat: Sats
+    blocked_sat: Sats
+    total_sat: Sats
+
+
+@dataclass(frozen=True)
 class CreateBidResult:
     """Result of creating a new bid."""
 
@@ -140,6 +150,10 @@ class HashpowerClient(Protocol):
         """Fetch the current spot market settings."""
         ...
 
+    def get_account_balance(self) -> AccountBalance:
+        """Fetch the authenticated account's balance."""
+        ...
+
 
 def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     bid = item["bid"]
@@ -179,6 +193,7 @@ class BraiinsClient:
     _SPOT_BID_CURRENT_PATH = "/spot/bid/current"
     _SPOT_BID_PATH = "/spot/bid"
     _SPOT_SETTINGS_PATH = "/spot/settings"
+    _ACCOUNT_BALANCE_PATH = "/account/balance"
 
     # API wire units.
     _API_HASH_UNIT = HashUnit.EH
@@ -394,6 +409,36 @@ class BraiinsClient:
                 seconds=int(data["min_bid_speed_limit_decrease_period_s"])
             ),
             price_tick=PriceTick(sats=Sats(int(data["tick_size_sat"]))),
+        )
+
+    def get_account_balance(self) -> AccountBalance:
+        """Fetch the authenticated account's balance.
+
+        Expects the response to contain exactly one account.
+
+        Raises:
+            ValueError: If no API key is configured, or if the response
+                does not contain exactly one account.
+            httpx.TimeoutException: If the request times out.
+            httpx.HTTPStatusError: If the server returns an error status.
+            httpx.RequestError: If a network-level error occurs.
+        """
+        url = f"{self._base_url}{self._ACCOUNT_BALANCE_PATH}"
+        logger.debug("GET %s", url)
+        response = self._http.get(url, headers=self._auth_headers())
+        response.raise_for_status()
+        logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
+        data: dict[str, Any] = response.json()
+        accounts = data["accounts"]
+        if len(accounts) != 1:
+            raise ValueError(
+                f"expected exactly one account in balance response, got {len(accounts)}"
+            )
+        account = accounts[0]
+        return AccountBalance(
+            available_sat=Sats(int(account["available_balance_sat"])),
+            blocked_sat=Sats(int(account["blocked_balance_sat"])),
+            total_sat=Sats(int(account["total_balance_sat"])),
         )
 
     def cancel_bid(self, order_id: BidId) -> None:
