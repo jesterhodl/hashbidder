@@ -395,3 +395,68 @@ class TestHistoryFetchWiring:
         # Conservative fallback: bid is within both decrease windows → both True.
         assert annotated.cooldown.price_cooldown is True
         assert annotated.cooldown.speed_cooldown is True
+
+
+class TestRegressionProxyFalsePositive:
+    """Direct regression for the 2026-04-17 09:52:02 incident.
+
+    A recent non-decrease edit (price increase only) previously bumped
+    ``last_updated`` and the proxy-only check pinned both flags True,
+    leaving the bid frozen even though the server would have accepted a
+    decrease on either field. Tier-2 history must override the proxy and
+    free the bid so the planner can lower it.
+    """
+
+    def test_recent_price_increase_only_does_not_pin_bid(self) -> None:
+        """Proxy flags both True; history shows only a price rise → bid is free."""
+        now = datetime(2026, 4, 17, 9, 52, 2, tzinfo=UTC)
+        # last_updated = 2 minutes ago → well inside both 600s decrease windows.
+        bid = make_user_bid(
+            "B86609956915618911",
+            900,
+            "4.0",
+            last_updated=now - timedelta(seconds=120),
+        )
+        # Only a price increase (800_000 → 900_000 sat/EH/Day) within the window;
+        # speed unchanged. No decrease of either field.
+        history = _history(
+            (
+                _entry(now - timedelta(seconds=3600), 800_000, "4"),
+                _entry(now - timedelta(seconds=120), 900_000, "4"),
+            )
+        )
+        client = FakeClient(
+            orderbook=_orderbook(served_price_sat=500_000),
+            current_bids=(bid,),
+            market_settings=_DETAIL_SETTINGS,
+            bid_histories={BidId("B86609956915618911"): history},
+        )
+        ocean = FakeOceanSource(account_stats=_account_stats("5"))
+
+        result = set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
+        )
+
+        # Tier-2 consulted once and cleared both flags.
+        assert _detail_call_count(client) == 1
+        (annotated,) = result.inputs.annotated_bids
+        assert annotated.cooldown.price_cooldown is False
+        assert annotated.cooldown.speed_cooldown is False
+
+        # The bid is no longer pinned: planner treats it as a fresh slot and
+        # the reconciler edits it down to the market price and distributed speed.
+        # needed=15, 3 slots → 5 PH/s each at desired price 501_000.
+        plan = result.set_bids_result.plan
+        assert plan.unchanged == ()
+        assert len(plan.edits) == 1
+        edit = plan.edits[0]
+        assert edit.bid is bid
+        assert edit.price_changed
+        assert edit.new_price.sats == Sats(501_000)
+        assert edit.speed_limit_changed
+        assert edit.new_speed_limit_ph == _ph_s("5")
+        assert len(plan.creates) == 2
+        for create in plan.creates:
+            assert create.config.price.sats == Sats(501_000)
+            assert create.config.speed_limit == _ph_s("5")
+        assert plan.cancels == ()
