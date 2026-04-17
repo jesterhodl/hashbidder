@@ -348,7 +348,7 @@ class TestGetBidDetail:
         }
 
     def test_parses_history_entries(self) -> None:
-        """Each history entry becomes a BidHistoryEntry with matching units."""
+        """Each history item becomes a BidHistoryEntry, normalised newest-first."""
         captured: list[httpx.Request] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -356,32 +356,33 @@ class TestGetBidDetail:
             return httpx.Response(200, json=self._detail_response_body())
 
         client = _make_client(httpx.MockTransport(handler))
-        entries = client.get_bid_detail(BidId("B42"))
+        history = client.get_bid_detail(BidId("B42"))
 
         assert captured[0].method == "GET"
         assert captured[0].url.path.endswith("/spot/bid/detail/B42")
         assert captured[0].headers["apikey"] == API_KEY
 
-        assert len(entries) == 2
-        assert entries[0].timestamp == datetime(2026, 4, 15, 9, 0, tzinfo=UTC)
-        assert entries[0].price == HashratePrice(sats=Sats(600_000), per=EH_DAY)
-        assert entries[0].speed_limit_ph == Hashrate(
-            Decimal("10.0"), HashUnit.PH, TimeUnit.SECOND
-        )
-        assert entries[1].timestamp == datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
-        assert entries[1].price == HashratePrice(sats=Sats(500_000), per=EH_DAY)
-        assert entries[1].speed_limit_ph == Hashrate(
+        # Response is older-first; BidHistory sorts to newest-first.
+        assert len(history.entries) == 2
+        assert history.entries[0].timestamp == datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
+        assert history.entries[0].price == HashratePrice(sats=Sats(500_000), per=EH_DAY)
+        assert history.entries[0].speed_limit_ph == Hashrate(
             Decimal("8.0"), HashUnit.PH, TimeUnit.SECOND
+        )
+        assert history.entries[1].timestamp == datetime(2026, 4, 15, 9, 0, tzinfo=UTC)
+        assert history.entries[1].price == HashratePrice(sats=Sats(600_000), per=EH_DAY)
+        assert history.entries[1].speed_limit_ph == Hashrate(
+            Decimal("10.0"), HashUnit.PH, TimeUnit.SECOND
         )
 
     def test_empty_history(self) -> None:
-        """A response with no history entries yields an empty tuple."""
+        """A response with no history entries yields an empty BidHistory."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"history": []})
 
         client = _make_client(httpx.MockTransport(handler))
-        assert client.get_bid_detail(BidId("B42")) == ()
+        assert client.get_bid_detail(BidId("B42")).entries == ()
 
     def test_404_raises_api_error(self) -> None:
         """An unknown bid id surfaces as ApiError 404."""

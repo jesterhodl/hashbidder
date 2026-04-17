@@ -5,7 +5,14 @@ from decimal import Decimal
 
 import pytest
 
-from hashbidder.client import ApiError, BidHistoryEntry, BidId, BidStatus, ClOrderId
+from hashbidder.client import (
+    ApiError,
+    BidHistory,
+    BidHistoryEntry,
+    BidId,
+    BidStatus,
+    ClOrderId,
+)
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
 from hashbidder.domain.time_unit import TimeUnit
@@ -127,12 +134,16 @@ class TestFakeClientGetBidDetail:
 
     def test_returns_seeded_history(self) -> None:
         """Seeded history is returned for the matching bid id."""
-        history = (
-            BidHistoryEntry(
-                timestamp=datetime(2026, 4, 15, tzinfo=UTC),
-                price=HashratePrice(sats=Sats(500_000), per=EH_DAY),
-                speed_limit_ph=Hashrate(Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND),
-            ),
+        history = BidHistory(
+            entries=(
+                BidHistoryEntry(
+                    timestamp=datetime(2026, 4, 15, tzinfo=UTC),
+                    price=HashratePrice(sats=Sats(500_000), per=EH_DAY),
+                    speed_limit_ph=Hashrate(
+                        Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND
+                    ),
+                ),
+            )
         )
         client = FakeClient(bid_histories={BidId("B1"): history})
 

@@ -10,7 +10,7 @@ from urllib.parse import unquote
 
 import httpx
 
-from hashbidder.domain.bid_history import BidHistoryEntry
+from hashbidder.domain.bid_history import BidHistory, BidHistoryEntry
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.progress import Progress
@@ -25,6 +25,7 @@ __all__ = [
     "AccountBalance",
     "ApiError",
     "AskItem",
+    "BidHistory",
     "BidHistoryEntry",
     "BidId",
     "BidItem",
@@ -156,8 +157,8 @@ class HashpowerClient(Protocol):
         """Fetch the authenticated account's balance."""
         ...
 
-    def get_bid_detail(self, bid_id: BidId) -> tuple[BidHistoryEntry, ...]:
-        """Fetch a bid's history as a tuple of BidHistoryEntry."""
+    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
+        """Fetch a bid's history as a BidHistory."""
         ...
 
 
@@ -464,11 +465,11 @@ class BraiinsClient:
         if not response.is_success:
             self._raise_api_error(response)
 
-    def get_bid_detail(self, bid_id: BidId) -> tuple[BidHistoryEntry, ...]:
+    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
         """Fetch a bid's full history.
 
         Returns:
-            The bid's history entries in the order the server provides them.
+            A BidHistory with the bid's entries normalised newest-first.
 
         Raises:
             ApiError: If the API returns a non-2xx response (e.g. 404 for
@@ -482,7 +483,7 @@ class BraiinsClient:
             self._raise_api_error(response)
         data: dict[str, Any] = json.loads(response.text, parse_float=Decimal)
         history = data.get("history") or []
-        return tuple(
+        entries = tuple(
             BidHistoryEntry(
                 timestamp=datetime.fromisoformat(item["timestamp"]),
                 price=HashratePrice(
@@ -497,3 +498,4 @@ class BraiinsClient:
             )
             for item in history
         )
+        return BidHistory(entries=entries)

@@ -6,7 +6,7 @@ from decimal import Decimal
 from hashbidder.client import (
     AccountBalance,
     ApiError,
-    BidHistoryEntry,
+    BidHistory,
     BidId,
     BidStatus,
     ClOrderId,
@@ -127,7 +127,7 @@ class FakeClient:
         errors: dict[tuple[str, str], list[ApiError]] | None = None,
         market_settings: MarketSettings = DEFAULT_MARKET_SETTINGS,
         account_balance: AccountBalance = DEFAULT_ACCOUNT_BALANCE,
-        bid_histories: dict[BidId, tuple[BidHistoryEntry, ...]] | None = None,
+        bid_histories: dict[BidId, BidHistory] | None = None,
     ) -> None:
         """Initialize with optional canned data and error injection."""
         self._orderbook = orderbook or OrderBook(bids=(), asks=())
@@ -223,7 +223,7 @@ class FakeClient:
                 return
         raise ApiError(404, f"Bid {order_id} not found")
 
-    def get_bid_detail(self, bid_id: BidId) -> tuple[BidHistoryEntry, ...]:
+    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
         """Return seeded history for a bid, or raise ApiError 404."""
         self.calls.append(("get_bid_detail", bid_id))
         self._maybe_raise("get_bid_detail", bid_id)
