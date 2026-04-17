@@ -67,38 +67,6 @@ class BidWithCooldown:
     cooldown: CooldownInfo
 
 
-def check_cooldowns(
-    bids: tuple[UserBid, ...],
-    settings: MarketSettings,
-    now: datetime,
-) -> tuple[BidWithCooldown, ...]:
-    """Tier-1 pre-filter: flag bids that may be in a decrease cooldown.
-
-    Derived only from ``UserBid.last_updated``, which is bumped by any user
-    update — including increases and no-op rewrites — so a True flag here
-    means "possibly cooling, consult history to find out", not "cooling".
-    A False flag is authoritative: a bid untouched for the full window
-    cannot be in a decrease cooldown.
-
-    Use `cooldown_from_history` for the authoritative per-field answer.
-    """
-    return tuple(
-        BidWithCooldown(
-            bid=bid,
-            cooldown=CooldownInfo(
-                price_cooldown=(
-                    now - bid.last_updated < settings.min_bid_price_decrease_period
-                ),
-                speed_cooldown=(
-                    now - bid.last_updated
-                    < settings.min_bid_speed_limit_decrease_period
-                ),
-            ),
-        )
-        for bid in bids
-    )
-
-
 def is_price_guaranteed_free(
     bid: UserBid, settings: MarketSettings, now: datetime
 ) -> bool:

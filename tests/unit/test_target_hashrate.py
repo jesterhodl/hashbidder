@@ -14,7 +14,6 @@ from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.target_hashrate import (
     BidWithCooldown,
     CooldownInfo,
-    check_cooldowns,
     compute_needed_hashrate,
     cooldown_from_history,
     distribute_bids,
@@ -247,40 +246,6 @@ def _annotated(bid: object, price_cd: bool, speed_cd: bool) -> BidWithCooldown:
         bid=bid,  # type: ignore[arg-type]
         cooldown=CooldownInfo(price_cooldown=price_cd, speed_cooldown=speed_cd),
     )
-
-
-class TestCheckCooldowns:
-    """Tests for check_cooldowns."""
-
-    def test_recent_bid_in_both_cooldowns(self) -> None:
-        """A bid updated 10s ago is in both cooldown windows."""
-        bid = make_user_bid("B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=10))
-        (entry,) = check_cooldowns((bid,), _SETTINGS, _NOW)
-        assert entry.bid is bid
-        assert entry.cooldown == CooldownInfo(price_cooldown=True, speed_cooldown=True)
-
-    def test_old_bid_in_neither_cooldown(self) -> None:
-        """A bid updated well past both cooldown windows is free."""
-        bid = make_user_bid(
-            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=3600)
-        )
-        (entry,) = check_cooldowns((bid,), _SETTINGS, _NOW)
-        assert entry.cooldown == CooldownInfo(
-            price_cooldown=False, speed_cooldown=False
-        )
-
-    def test_distinct_windows(self) -> None:
-        """Different periods can leave one cooldown active and the other not."""
-        settings = MarketSettings(
-            min_bid_price_decrease_period=timedelta(seconds=600),
-            min_bid_speed_limit_decrease_period=timedelta(seconds=60),
-            price_tick=_TICK,
-        )
-        bid = make_user_bid(
-            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=120)
-        )
-        (entry,) = check_cooldowns((bid,), settings, _NOW)
-        assert entry.cooldown == CooldownInfo(price_cooldown=True, speed_cooldown=False)
 
 
 def _history_entry(t: datetime, price_sat: int, speed: str) -> BidHistoryEntry:
