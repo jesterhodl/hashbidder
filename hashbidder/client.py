@@ -157,7 +157,7 @@ class HashpowerClient(Protocol):
         """Fetch the authenticated account's balance."""
         ...
 
-    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
+    def get_bid_history(self, bid_id: BidId) -> BidHistory:
         """Fetch a bid's history as a BidHistory."""
         ...
 
@@ -465,7 +465,7 @@ class BraiinsClient:
         if not response.is_success:
             self._raise_api_error(response)
 
-    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
+    def get_bid_history(self, bid_id: BidId) -> BidHistory:
         """Fetch a bid's full history.
 
         Returns:

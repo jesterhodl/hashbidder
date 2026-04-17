@@ -292,15 +292,15 @@ def _entry(t: datetime, price_sat_per_eh_day: int, speed: str) -> BidHistoryEntr
     )
 
 
-def _detail_call_count(client: FakeClient) -> int:
-    return sum(1 for call in client.calls if call[0] == "get_bid_detail")
+def _history_call_count(client: FakeClient) -> int:
+    return sum(1 for call in client.calls if call[0] == "get_bid_history")
 
 
 class TestHistoryFetchWiring:
     """Tests for the tier-1 / tier-2 wiring inside set_bids_target."""
 
     def test_not_in_cooldown_bids_incur_zero_history_fetches(self) -> None:
-        """All bids past both decrease windows → no /spot/bid/detail calls."""
+        """All bids past both decrease windows → no get_bid_history calls."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         old = now - timedelta(seconds=3600)
         bids = (
@@ -316,7 +316,7 @@ class TestHistoryFetchWiring:
 
         set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True, now=now)
 
-        assert _detail_call_count(client) == 0
+        assert _history_call_count(client) == 0
 
     def test_recent_increase_only_history_clears_both_flags(self) -> None:
         """Tier-1 ambiguous + history shows only an increase → bid is free."""
@@ -341,7 +341,7 @@ class TestHistoryFetchWiring:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        assert _detail_call_count(client) == 1
+        assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
         assert annotated.cooldown.price_cooldown is False
         assert annotated.cooldown.speed_cooldown is False
@@ -368,7 +368,7 @@ class TestHistoryFetchWiring:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        assert _detail_call_count(client) == 1
+        assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
         assert annotated.cooldown.speed_cooldown is True
         assert annotated.cooldown.price_cooldown is False
@@ -381,8 +381,8 @@ class TestHistoryFetchWiring:
             orderbook=_orderbook(served_price_sat=500_000),
             current_bids=(bid,),
             market_settings=_DETAIL_SETTINGS,
-            # No seeded history → get_bid_detail raises ApiError 404.
-            errors={("get_bid_detail", "B1"): [ApiError(500, "boom")]},
+            # No seeded history → get_bid_history raises ApiError 404.
+            errors={("get_bid_history", "B1"): [ApiError(500, "boom")]},
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
@@ -390,7 +390,7 @@ class TestHistoryFetchWiring:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        assert _detail_call_count(client) == 1
+        assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
         # Conservative fallback: bid is within both decrease windows → both True.
         assert annotated.cooldown.price_cooldown is True
@@ -438,7 +438,7 @@ class TestRegressionProxyFalsePositive:
         )
 
         # Tier-2 consulted once and cleared both flags.
-        assert _detail_call_count(client) == 1
+        assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
         assert annotated.cooldown.price_cooldown is False
         assert annotated.cooldown.speed_cooldown is False

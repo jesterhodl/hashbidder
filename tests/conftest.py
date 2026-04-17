@@ -223,10 +223,10 @@ class FakeClient:
                 return
         raise ApiError(404, f"Bid {order_id} not found")
 
-    def get_bid_detail(self, bid_id: BidId) -> BidHistory:
+    def get_bid_history(self, bid_id: BidId) -> BidHistory:
         """Return seeded history for a bid, or raise ApiError 404."""
-        self.calls.append(("get_bid_detail", bid_id))
-        self._maybe_raise("get_bid_detail", bid_id)
+        self.calls.append(("get_bid_history", bid_id))
+        self._maybe_raise("get_bid_history", bid_id)
         if bid_id not in self._bid_histories:
             raise ApiError(404, f"Bid {bid_id} not found")
         return self._bid_histories[bid_id]

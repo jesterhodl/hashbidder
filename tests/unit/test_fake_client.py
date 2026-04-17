@@ -129,8 +129,8 @@ class TestFakeClientErrorInjection:
         assert client.calls == [("edit_bid", "B1"), ("cancel_bid", "B1")]
 
 
-class TestFakeClientGetBidDetail:
-    """Tests for FakeClient.get_bid_detail."""
+class TestFakeClientGetBidHistory:
+    """Tests for FakeClient.get_bid_history."""
 
     def test_returns_seeded_history(self) -> None:
         """Seeded history is returned for the matching bid id."""
@@ -147,10 +147,10 @@ class TestFakeClientGetBidDetail:
         )
         client = FakeClient(bid_histories={BidId("B1"): history})
 
-        assert client.get_bid_detail(BidId("B1")) == history
+        assert client.get_bid_history(BidId("B1")) == history
 
     def test_unknown_id_raises_404(self) -> None:
         """An id with no seeded history raises ApiError 404."""
         client = FakeClient()
         with pytest.raises(ApiError, match="not found"):
-            client.get_bid_detail(BidId("B999"))
+            client.get_bid_history(BidId("B999"))

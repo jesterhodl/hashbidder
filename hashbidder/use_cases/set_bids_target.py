@@ -62,7 +62,7 @@ def resolve_cooldowns(
     1. **Cheap check.** If the tier-1 predicates prove both fields past
        their decrease windows (i.e. ``last_updated`` is old enough),
        emit ``CooldownInfo(False, False)`` — no history fetch needed.
-    2. **History fetch.** Otherwise, call ``get_bid_detail`` and derive
+    2. **History fetch.** Otherwise, call ``get_bid_history`` and derive
        the authoritative answer from the bid's history.
     3. **Fetch failure fallback.** If the history fetch raises an
        ``ApiError``, fall back to a per-field conservative estimate:
@@ -76,7 +76,7 @@ def resolve_cooldowns(
             cooldown = CooldownInfo(price_cooldown=False, speed_cooldown=False)
         else:
             try:
-                history = client.get_bid_detail(bid.id)
+                history = client.get_bid_history(bid.id)
             except ApiError:
                 cooldown = CooldownInfo(
                     price_cooldown=not price_free,

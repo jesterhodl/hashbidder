@@ -319,8 +319,8 @@ class TestGetAccountBalance:
             client.get_account_balance()
 
 
-class TestGetBidDetail:
-    """Tests for BraiinsClient.get_bid_detail parsing."""
+class TestGetBidHistory:
+    """Tests for BraiinsClient.get_bid_history parsing."""
 
     @staticmethod
     def _detail_response_body() -> dict[str, object]:
@@ -356,7 +356,7 @@ class TestGetBidDetail:
             return httpx.Response(200, json=self._detail_response_body())
 
         client = _make_client(httpx.MockTransport(handler))
-        history = client.get_bid_detail(BidId("B42"))
+        history = client.get_bid_history(BidId("B42"))
 
         assert captured[0].method == "GET"
         assert captured[0].url.path.endswith("/spot/bid/detail/B42")
@@ -382,7 +382,7 @@ class TestGetBidDetail:
             return httpx.Response(200, json={"history": []})
 
         client = _make_client(httpx.MockTransport(handler))
-        assert client.get_bid_detail(BidId("B42")).entries == ()
+        assert client.get_bid_history(BidId("B42")).entries == ()
 
     def test_404_raises_api_error(self) -> None:
         """An unknown bid id surfaces as ApiError 404."""
@@ -392,7 +392,7 @@ class TestGetBidDetail:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(ApiError) as exc_info:
-            client.get_bid_detail(BidId("B999"))
+            client.get_bid_history(BidId("B999"))
         assert exc_info.value.status_code == 404
 
 
