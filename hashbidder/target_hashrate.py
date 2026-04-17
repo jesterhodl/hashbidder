@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from hashbidder.client import MarketSettings, OrderBook, UserBid
 from hashbidder.domain.bid_config import BidConfig
+from hashbidder.domain.bid_history import BidHistory
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.time_unit import TimeUnit
@@ -71,7 +72,16 @@ def check_cooldowns(
     settings: MarketSettings,
     now: datetime,
 ) -> tuple[BidWithCooldown, ...]:
-    """Annotate each bid with its current price/speed cooldown status."""
+    """Tier-1 pre-filter: flag bids that may be in a decrease cooldown.
+
+    Derived only from ``UserBid.last_updated``, which is bumped by any user
+    update — including increases and no-op rewrites — so a True flag here
+    means "possibly cooling, consult history to find out", not "cooling".
+    A False flag is authoritative: a bid untouched for the full window
+    cannot be in a decrease cooldown.
+
+    Use `cooldown_from_history` for the authoritative per-field answer.
+    """
     return tuple(
         BidWithCooldown(
             bid=bid,
@@ -86,6 +96,63 @@ def check_cooldowns(
             ),
         )
         for bid in bids
+    )
+
+
+def is_price_guaranteed_free(
+    bid: UserBid, settings: MarketSettings, now: datetime
+) -> bool:
+    """True iff the bid's price is provably past its decrease window.
+
+    Derived from ``UserBid.last_updated``, which is bumped by any user
+    update — including increases and no-op rewrites. If the bid has not
+    been touched for at least the price decrease period, no price
+    decrease can be sitting inside that window.
+
+    A False answer is non-committal ("we can't tell from this alone")
+    and must be resolved by fetching the bid's history.
+    """
+    return now - bid.last_updated >= settings.min_bid_price_decrease_period
+
+
+def is_speed_guaranteed_free(
+    bid: UserBid, settings: MarketSettings, now: datetime
+) -> bool:
+    """True iff the bid's speed limit is provably past its decrease window.
+
+    Derived from ``UserBid.last_updated``, which is bumped by any user
+    update — including increases and no-op rewrites. If the bid has not
+    been touched for at least the speed decrease period, no speed
+    decrease can be sitting inside that window.
+
+    A False answer is non-committal ("we can't tell from this alone")
+    and must be resolved by fetching the bid's history.
+    """
+    return now - bid.last_updated >= settings.min_bid_speed_limit_decrease_period
+
+
+def cooldown_from_history(
+    history: BidHistory,
+    settings: MarketSettings,
+    now: datetime,
+) -> CooldownInfo:
+    """Authoritative per-field cooldown status derived from bid history.
+
+    Each flag is True iff the last decrease of that field occurred within
+    its own window in ``settings``. Missing timestamp (no decrease ever,
+    or none visible in history) → flag is False.
+    """
+    last_price = history.last_price_decrease_at()
+    last_speed = history.last_speed_decrease_at()
+    return CooldownInfo(
+        price_cooldown=(
+            last_price is not None
+            and now - last_price < settings.min_bid_price_decrease_period
+        ),
+        speed_cooldown=(
+            last_speed is not None
+            and now - last_speed < settings.min_bid_speed_limit_decrease_period
+        ),
     )
 
 
