@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from hashbidder.client import BidItem, MarketSettings, OrderBook
+from hashbidder.domain.bid_history import BidHistory, BidHistoryEntry
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.sats import Sats
@@ -13,10 +14,12 @@ from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.target_hashrate import (
     BidWithCooldown,
     CooldownInfo,
-    check_cooldowns,
     compute_needed_hashrate,
+    cooldown_from_history,
     distribute_bids,
     find_market_price,
+    is_price_guaranteed_free,
+    is_speed_guaranteed_free,
     plan_with_cooldowns,
 )
 from tests.conftest import make_user_bid
@@ -245,38 +248,156 @@ def _annotated(bid: object, price_cd: bool, speed_cd: bool) -> BidWithCooldown:
     )
 
 
-class TestCheckCooldowns:
-    """Tests for check_cooldowns."""
+def _history_entry(t: datetime, price_sat: int, speed: str) -> BidHistoryEntry:
+    return BidHistoryEntry(
+        timestamp=t,
+        price=HashratePrice(sats=Sats(price_sat), per=EH_DAY),
+        speed_limit_ph=_ph_s(speed),
+    )
 
-    def test_recent_bid_in_both_cooldowns(self) -> None:
-        """A bid updated 10s ago is in both cooldown windows."""
-        bid = make_user_bid("B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=10))
-        (entry,) = check_cooldowns((bid,), _SETTINGS, _NOW)
-        assert entry.bid is bid
-        assert entry.cooldown == CooldownInfo(price_cooldown=True, speed_cooldown=True)
 
-    def test_old_bid_in_neither_cooldown(self) -> None:
-        """A bid updated well past both cooldown windows is free."""
+_SPLIT_SETTINGS = MarketSettings(
+    min_bid_price_decrease_period=timedelta(seconds=600),
+    min_bid_speed_limit_decrease_period=timedelta(seconds=60),
+    price_tick=_TICK,
+)
+
+
+class TestIsPriceGuaranteedFree:
+    """Tests for is_price_guaranteed_free — tier-1 boolean for the price field."""
+
+    def test_not_in_cooldown_bid_is_free(self) -> None:
+        """Untouched for longer than the price window → provably past cooldown."""
         bid = make_user_bid(
             "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=3600)
         )
-        (entry,) = check_cooldowns((bid,), _SETTINGS, _NOW)
-        assert entry.cooldown == CooldownInfo(
-            price_cooldown=False, speed_cooldown=False
+        assert is_price_guaranteed_free(bid, _SETTINGS, _NOW) is True
+
+    def test_recently_touched_bid_is_not_free(self) -> None:
+        """Touched within the price window → non-committal (could be cooling)."""
+        bid = make_user_bid("B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=10))
+        assert is_price_guaranteed_free(bid, _SETTINGS, _NOW) is False
+
+    def test_uses_only_the_price_window(self) -> None:
+        """Past the speed window but inside the price window → not free."""
+        bid = make_user_bid(
+            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=120)
+        )
+        assert is_price_guaranteed_free(bid, _SPLIT_SETTINGS, _NOW) is False
+
+    def test_exact_boundary_is_free(self) -> None:
+        """At exactly the price-window boundary the predicate clears the bid."""
+        bid = make_user_bid(
+            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=600)
+        )
+        assert is_price_guaranteed_free(bid, _SETTINGS, _NOW) is True
+
+
+class TestIsSpeedGuaranteedFree:
+    """Tests for is_speed_guaranteed_free — tier-1 boolean for the speed field."""
+
+    def test_not_in_cooldown_bid_is_free(self) -> None:
+        """Untouched for longer than the speed window → provably past cooldown."""
+        bid = make_user_bid(
+            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=3600)
+        )
+        assert is_speed_guaranteed_free(bid, _SETTINGS, _NOW) is True
+
+    def test_recently_touched_bid_is_not_free(self) -> None:
+        """Touched within the speed window → non-committal (could be cooling)."""
+        bid = make_user_bid("B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=10))
+        assert is_speed_guaranteed_free(bid, _SETTINGS, _NOW) is False
+
+    def test_independent_of_price_window(self) -> None:
+        """Past speed window but inside price window → speed is free, price isn't."""
+        bid = make_user_bid(
+            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=120)
+        )
+        assert is_speed_guaranteed_free(bid, _SPLIT_SETTINGS, _NOW) is True
+        assert is_price_guaranteed_free(bid, _SPLIT_SETTINGS, _NOW) is False
+
+    def test_exact_boundary_is_free(self) -> None:
+        """At exactly the speed-window boundary the predicate clears the bid."""
+        bid = make_user_bid("B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=60))
+        assert is_speed_guaranteed_free(bid, _SPLIT_SETTINGS, _NOW) is True
+
+
+class TestCooldownFromHistory:
+    """Tests for cooldown_from_history — the authoritative per-field answer."""
+
+    def test_recent_price_decrease_sets_only_price_flag(self) -> None:
+        """Only price dropped in window → price_cooldown=True, speed_cooldown=False."""
+        history = BidHistory(
+            entries=(
+                _history_entry(_NOW - timedelta(seconds=3600), 500_000, "5"),
+                _history_entry(_NOW - timedelta(seconds=60), 400_000, "5"),
+            )
+        )
+        assert cooldown_from_history(history, _SETTINGS, _NOW) == CooldownInfo(
+            price_cooldown=True, speed_cooldown=False
         )
 
-    def test_distinct_windows(self) -> None:
-        """Different periods can leave one cooldown active and the other not."""
+    def test_recent_speed_decrease_sets_only_speed_flag(self) -> None:
+        """Only speed dropped in window → price_cooldown=False, speed_cooldown=True."""
+        history = BidHistory(
+            entries=(
+                _history_entry(_NOW - timedelta(seconds=3600), 500_000, "10"),
+                _history_entry(_NOW - timedelta(seconds=60), 500_000, "5"),
+            )
+        )
+        assert cooldown_from_history(history, _SETTINGS, _NOW) == CooldownInfo(
+            price_cooldown=False, speed_cooldown=True
+        )
+
+    def test_stale_decrease_outside_window_is_ignored(self) -> None:
+        """Per-field windows: only the decrease inside its own window locks."""
         settings = MarketSettings(
             min_bid_price_decrease_period=timedelta(seconds=600),
             min_bid_speed_limit_decrease_period=timedelta(seconds=60),
             price_tick=_TICK,
         )
-        bid = make_user_bid(
-            "B1", 500, "5.0", last_updated=_NOW - timedelta(seconds=120)
+        # Price drop at -120s: inside price window (600s), outside speed window (60s).
+        # Speed drop at -30s: inside both windows.
+        history = BidHistory(
+            entries=(
+                _history_entry(_NOW - timedelta(seconds=3600), 500_000, "10"),
+                _history_entry(_NOW - timedelta(seconds=120), 400_000, "10"),
+                _history_entry(_NOW - timedelta(seconds=30), 400_000, "5"),
+            )
         )
-        (entry,) = check_cooldowns((bid,), settings, _NOW)
-        assert entry.cooldown == CooldownInfo(price_cooldown=True, speed_cooldown=False)
+        assert cooldown_from_history(history, settings, _NOW) == CooldownInfo(
+            price_cooldown=True, speed_cooldown=True
+        )
+
+        # Now push the price drop outside the price window (>600s ago).
+        stale_history = BidHistory(
+            entries=(
+                _history_entry(_NOW - timedelta(seconds=3600), 500_000, "10"),
+                _history_entry(_NOW - timedelta(seconds=1000), 400_000, "10"),
+                _history_entry(_NOW - timedelta(seconds=30), 400_000, "5"),
+            )
+        )
+        assert cooldown_from_history(stale_history, settings, _NOW) == CooldownInfo(
+            price_cooldown=False, speed_cooldown=True
+        )
+
+    def test_recent_increase_only_yields_both_false(self) -> None:
+        """Non-decrease edits do not set either flag — the 09:52 false-positive case."""
+        history = BidHistory(
+            entries=(
+                _history_entry(_NOW - timedelta(seconds=3600), 400_000, "5"),
+                _history_entry(_NOW - timedelta(seconds=60), 500_000, "5"),
+            )
+        )
+        assert cooldown_from_history(history, _SETTINGS, _NOW) == CooldownInfo(
+            price_cooldown=False, speed_cooldown=False
+        )
+
+    def test_empty_history_yields_both_false(self) -> None:
+        """A brand-new bid (empty history) has no decrease events → free."""
+        assert cooldown_from_history(
+            BidHistory(entries=()), _SETTINGS, _NOW
+        ) == CooldownInfo(price_cooldown=False, speed_cooldown=False)
 
 
 class TestPlanWithCooldowns:

@@ -10,6 +10,7 @@ from urllib.parse import unquote
 
 import httpx
 
+from hashbidder.domain.bid_history import BidHistory, BidHistoryEntry
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.progress import Progress
@@ -24,6 +25,8 @@ __all__ = [
     "AccountBalance",
     "ApiError",
     "AskItem",
+    "BidHistory",
+    "BidHistoryEntry",
     "BidId",
     "BidItem",
     "BidStatus",
@@ -154,6 +157,10 @@ class HashpowerClient(Protocol):
         """Fetch the authenticated account's balance."""
         ...
 
+    def get_bid_history(self, bid_id: BidId) -> BidHistory:
+        """Fetch a bid's history as a BidHistory."""
+        ...
+
 
 def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     bid = item["bid"]
@@ -192,6 +199,7 @@ class BraiinsClient:
     _SPOT_ORDERBOOK_PATH = "/spot/orderbook"
     _SPOT_BID_CURRENT_PATH = "/spot/bid/current"
     _SPOT_BID_PATH = "/spot/bid"
+    _SPOT_BID_DETAIL_PATH = "/spot/bid/detail"
     _SPOT_SETTINGS_PATH = "/spot/settings"
     _ACCOUNT_BALANCE_PATH = "/account/balance"
 
@@ -456,3 +464,38 @@ class BraiinsClient:
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         if not response.is_success:
             self._raise_api_error(response)
+
+    def get_bid_history(self, bid_id: BidId) -> BidHistory:
+        """Fetch a bid's full history.
+
+        Returns:
+            A BidHistory with the bid's entries normalised newest-first.
+
+        Raises:
+            ApiError: If the API returns a non-2xx response (e.g. 404 for
+                an unknown bid, 403 for a bid owned by another user).
+        """
+        url = f"{self._base_url}{self._SPOT_BID_DETAIL_PATH}/{bid_id}"
+        logger.debug("GET %s", url)
+        response = self._http.get(url, headers=self._auth_headers())
+        logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
+        if not response.is_success:
+            self._raise_api_error(response)
+        data: dict[str, Any] = json.loads(response.text, parse_float=Decimal)
+        history = data.get("history") or []
+        entries = tuple(
+            BidHistoryEntry(
+                timestamp=datetime.fromisoformat(item["timestamp"]),
+                price=HashratePrice(
+                    sats=Sats(int(item["price_sat"])),
+                    per=Hashrate(Decimal(1), self._API_HASH_UNIT, self._API_TIME_UNIT),
+                ),
+                speed_limit_ph=Hashrate(
+                    Decimal(item["speed_limit_ph"]),
+                    self._API_SPEED_HASH_UNIT,
+                    self._API_SPEED_TIME_UNIT,
+                ),
+            )
+            for item in history
+        )
+        return BidHistory(entries=entries)
