@@ -11,12 +11,8 @@ from hashbidder.domain.hashrate import Hashrate, HashratePrice
 from hashbidder.ocean_client import OceanSource, OceanTimeWindow
 from hashbidder.target_hashrate import (
     BidWithCooldown,
-    CooldownInfo,
     compute_needed_hashrate,
-    cooldown_from_history,
     find_market_price,
-    is_price_guaranteed_free,
-    is_speed_guaranteed_free,
     plan_with_cooldowns,
 )
 
@@ -57,41 +53,39 @@ def resolve_cooldowns(
 ) -> tuple[BidWithCooldown, ...]:
     """Per-bid cooldown annotation via a cheap tier-1 check, then tier-2 history.
 
-    Per bid, in order:
-
-    1. **Cheap check.** If the tier-1 predicates prove both fields past
-       their decrease windows (i.e. ``last_updated`` is old enough),
-       emit ``CooldownInfo(False, False)`` — no history fetch needed.
-    2. **History fetch.** Otherwise, call ``get_bid_history`` and derive
-       the authoritative answer from the bid's history.
-    3. **Fetch failure fallback.** If the history fetch raises an
-       ``ApiError``, fall back to a per-field conservative estimate:
-       each flag is True unless its tier-1 predicate proves it free.
+    Call ``get_bid_history`` and derive the authoritative answer from the bid's
+    history. If the history fetch raises an ``ApiError``, fall back to a per-field
+    conservative estimate: each flag is True unless its tier-1 predicate proves it
+    free.
     """
-    annotated: list[BidWithCooldown] = []
+    bids_with_cooldown: list[BidWithCooldown] = []
     for bid in bids:
-        price_free = is_price_guaranteed_free(bid, settings, now)
-        speed_free = is_speed_guaranteed_free(bid, settings, now)
-        if price_free and speed_free:
-            cooldown = CooldownInfo(price_cooldown=False, speed_cooldown=False)
+        try:
+            history = client.get_bid_history(bid.id)
+        except ApiError:
+            is_this_bid_in_price_cooldown = True
+            is_this_bid_in_speed_cooldown = True
         else:
-            try:
-                history = client.get_bid_history(bid.id)
-            except ApiError:
-                cooldown = CooldownInfo(
-                    price_cooldown=not price_free,
-                    speed_cooldown=not speed_free,
-                )
-            else:
-                cooldown = cooldown_from_history(history, settings, now)
-        annotated.append(
+            last_price_decrease_at = history.last_price_decrease_at()
+            is_this_bid_in_price_cooldown = (
+                last_price_decrease_at is not None
+                and now - last_price_decrease_at
+                < settings.min_bid_price_decrease_period
+            )
+            last_speed_decrease_at = history.last_speed_decrease_at()
+            is_this_bid_in_speed_cooldown = (
+                last_speed_decrease_at is not None
+                and now - last_speed_decrease_at
+                < settings.min_bid_speed_limit_decrease_period
+            )
+        bids_with_cooldown.append(
             BidWithCooldown(
                 bid=bid,
-                is_price_in_cooldown=cooldown.price_cooldown,
-                is_speed_in_cooldown=cooldown.speed_cooldown,
+                is_price_in_cooldown=is_this_bid_in_price_cooldown,
+                is_speed_in_cooldown=is_this_bid_in_speed_cooldown,
             )
         )
-    return tuple(annotated)
+    return tuple(bids_with_cooldown)
 
 
 def set_bids_target(
@@ -108,10 +102,8 @@ def set_bids_target(
         1. Read Ocean's 24h hashrate.
         2. Find the cheapest served bid in the order book and undercut it by 1 sat.
         3. Compute needed hashrate.
-        4. Resolve per-bid cooldowns: tier-1 cheap predicates clear bids
-           that are provably not-in-cooldown with zero extra calls; tier-2
-           fetches /spot/bid/detail history for the rest and derives
-           authoritative per-field timestamps.
+        4. Resolve per-bid cooldowns: fetches /spot/bid/detail history for the rest and
+           derives authoritative per-field timestamps.
         5. Build a cooldown-aware SetBidsConfig and hand it to reconciliation.
 
     `now` defaults to the current UTC time; tests inject a fixed value.

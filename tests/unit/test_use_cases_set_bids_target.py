@@ -163,6 +163,13 @@ class TestSetBidsTarget:
         cooldown_bid = make_user_bid(
             "B1", 800, "4.0", last_updated=now - timedelta(seconds=30)
         )
+        # History: recent price decrease (within 600s window), no speed decrease.
+        history = _history(
+            (
+                _entry(now - timedelta(seconds=3600), 900_000, "4"),
+                _entry(now - timedelta(seconds=30), 800_000, "4"),
+            )
+        )
         client = FakeClient(
             orderbook=_orderbook(served_price_sat=500_000),
             current_bids=(cooldown_bid,),
@@ -171,6 +178,7 @@ class TestSetBidsTarget:
                 min_bid_speed_limit_decrease_period=timedelta(seconds=10),
                 price_tick=PriceTick(sats=Sats(1000)),
             ),
+            bid_histories={BidId("B1"): history},
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
@@ -298,25 +306,6 @@ def _history_call_count(client: FakeClient) -> int:
 
 class TestHistoryFetchWiring:
     """Tests for the tier-1 / tier-2 wiring inside set_bids_target."""
-
-    def test_not_in_cooldown_bids_incur_zero_history_fetches(self) -> None:
-        """All bids past both decrease windows → no get_bid_history calls."""
-        now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
-        old = now - timedelta(seconds=3600)
-        bids = (
-            make_user_bid("B1", 600, "2.0", last_updated=old),
-            make_user_bid("B2", 700, "3.0", last_updated=old),
-        )
-        client = FakeClient(
-            orderbook=_orderbook(served_price_sat=500_000),
-            current_bids=bids,
-            market_settings=_DETAIL_SETTINGS,
-        )
-        ocean = FakeOceanSource(account_stats=_account_stats("5"))
-
-        set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True, now=now)
-
-        assert _history_call_count(client) == 0
 
     def test_recent_increase_only_history_clears_both_flags(self) -> None:
         """Tier-1 ambiguous + history shows only an increase → bid is free."""
