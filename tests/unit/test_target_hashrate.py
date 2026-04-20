@@ -410,7 +410,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
-            bids=(),
+            bids_with_cooldowns=(),
         )
         assert len(result) == 3
         assert all(b.price == DESIRED_PRICE for b in result)
@@ -425,7 +425,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("4"),
             max_bids_count=2,
-            bids=(_annotated(bid, price_cd=True, speed_cd=False),),
+            bids_with_cooldowns=(_annotated(bid, price_cd=True, speed_cd=False),),
         )
         assert len(result) == 2
         assert result[0].price == bid.price
@@ -440,7 +440,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
-            bids=(_annotated(bid, price_cd=False, speed_cd=True),),
+            bids_with_cooldowns=(_annotated(bid, price_cd=False, speed_cd=True),),
         )
         assert len(result) == 3
         assert result[0].speed_limit == _ph_s("3")
@@ -457,7 +457,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
-            bids=(_annotated(bid, price_cd=True, speed_cd=True),),
+            bids_with_cooldowns=(_annotated(bid, price_cd=True, speed_cd=True),),
         )
         assert result[0].price == bid.price
         assert result[0].speed_limit == _ph_s("3")
@@ -476,7 +476,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("5"),
             max_bids_count=2,
-            bids=(
+            bids_with_cooldowns=(
                 _annotated(b1, price_cd=True, speed_cd=True),
                 _annotated(b2, price_cd=True, speed_cd=True),
             ),
@@ -493,7 +493,7 @@ class TestPlanWithCooldowns:
             desired_price=DESIRED_PRICE,
             hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
-            bids=(_annotated(bid, price_cd=False, speed_cd=True),),
+            bids_with_cooldowns=(_annotated(bid, price_cd=False, speed_cd=True),),
         )
         # Only the locked bid; no extras since remaining is 0.
         assert len(result) == 1

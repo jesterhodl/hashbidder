@@ -129,7 +129,7 @@ def plan_with_cooldowns(
     desired_price: HashratePrice,
     hashrate_to_set: Hashrate,
     max_bids_count: int,
-    bids: tuple[BidWithCooldown, ...],
+    bids_with_cooldowns: tuple[BidWithCooldown, ...],
 ) -> tuple[BidConfig, ...]:
     """Build a bid plan that respects per-bid cooldown constraints.
 
@@ -145,9 +145,11 @@ def plan_with_cooldowns(
     first to price-locked bids (preserving their old price), then to brand-new
     slots at `desired_price`.
     """
-    speed_locked = [b for b in bids if b.is_speed_in_cooldown]
+    speed_locked = [b for b in bids_with_cooldowns if b.is_speed_in_cooldown]
     price_locked_only = [
-        b for b in bids if b.is_price_in_cooldown and not b.is_speed_in_cooldown
+        b
+        for b in bids_with_cooldowns
+        if b.is_price_in_cooldown and not b.is_speed_in_cooldown
     ]
 
     locked_speed_total = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)

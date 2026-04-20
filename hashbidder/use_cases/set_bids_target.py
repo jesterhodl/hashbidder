@@ -122,31 +122,31 @@ def set_bids_target(
     ocean_24h = _ocean_24h(ocean, address)
     settings = client.get_market_settings()
     orderbook = client.get_orderbook()
-    price = find_market_price(orderbook, settings.price_tick)
-    hashrate_to_set = compute_needed_hashrate(config.target_hashrate, ocean_24h)
+    price_to_set_bids_to = find_market_price(orderbook, settings.price_tick)
+    total_hashrate_to_set = compute_needed_hashrate(config.target_hashrate, ocean_24h)
 
     current_bids = client.get_current_bids()
-    annotated = resolve_cooldowns(current_bids, settings, now, client)
-    bids = plan_with_cooldowns(
-        desired_price=price,
-        hashrate_to_set=hashrate_to_set,
+    bids_with_cooldowns = resolve_cooldowns(current_bids, settings, now, client)
+    target_bid_states = plan_with_cooldowns(
+        desired_price=price_to_set_bids_to,
+        hashrate_to_set=total_hashrate_to_set,
         max_bids_count=config.max_bids_count,
-        bids=annotated,
+        bids_with_cooldowns=bids_with_cooldowns,
     )
 
     computed = SetBidsConfig(
         default_amount=config.default_amount,
         upstream=config.upstream,
-        bids=bids,
+        bids=target_bid_states,
     )
 
     inputs = TargetHashrateInputs(
         ocean_24h=ocean_24h,
         target=config.target_hashrate,
-        needed=hashrate_to_set,
-        price=price,
+        needed=total_hashrate_to_set,
+        price=price_to_set_bids_to,
         max_bids_count=config.max_bids_count,
-        annotated_bids=annotated,
+        annotated_bids=bids_with_cooldowns,
     )
     return SetBidsTargetResult(
         inputs=inputs,
