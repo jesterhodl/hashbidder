@@ -331,7 +331,7 @@ class TestHistoryFetchWiring:
         )
 
         assert _history_call_count(client) == 1
-        (annotated,) = result.inputs.annotated_bids
+        (annotated,) = result.inputs.bids_with_cooldowns
         assert annotated.is_price_in_cooldown is False
         assert annotated.is_speed_in_cooldown is False
 
@@ -358,7 +358,7 @@ class TestHistoryFetchWiring:
         )
 
         assert _history_call_count(client) == 1
-        (annotated,) = result.inputs.annotated_bids
+        (annotated,) = result.inputs.bids_with_cooldowns
         assert annotated.is_speed_in_cooldown is True
         assert annotated.is_price_in_cooldown is False
 
@@ -380,7 +380,7 @@ class TestHistoryFetchWiring:
         )
 
         assert _history_call_count(client) == 1
-        (annotated,) = result.inputs.annotated_bids
+        (annotated,) = result.inputs.bids_with_cooldowns
         # Conservative fallback: bid is within both decrease windows → both True.
         assert annotated.is_price_in_cooldown is True
         assert annotated.is_speed_in_cooldown is True
@@ -428,7 +428,7 @@ class TestRegressionProxyFalsePositive:
 
         # Tier-2 consulted once and cleared both flags.
         assert _history_call_count(client) == 1
-        (annotated,) = result.inputs.annotated_bids
+        (annotated,) = result.inputs.bids_with_cooldowns
         assert annotated.is_price_in_cooldown is False
         assert annotated.is_speed_in_cooldown is False
 

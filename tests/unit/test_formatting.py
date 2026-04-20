@@ -399,7 +399,7 @@ class TestFormatTargetHashrateVerbose:
             needed=ph_s("15"),
             price=HashratePrice(sats=Sats(801), per=PH_DAY),
             max_bids_count=3,
-            annotated_bids=annotated,
+            bids_with_cooldowns=annotated,
         )
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
         return SetBidsTargetResult(

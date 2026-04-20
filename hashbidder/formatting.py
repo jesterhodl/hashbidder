@@ -400,7 +400,7 @@ def format_set_bids_target_result_verbose(result: SetBidsTargetResult) -> str:
             max_bids_count=inputs.max_bids_count,
         ),
         "",
-        _format_target_cooldowns(inputs.annotated_bids),
+        _format_target_cooldowns(inputs.bids_with_cooldowns),
         "",
         format_set_bids_result(result.set_bids_result),
     ]

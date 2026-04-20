@@ -26,7 +26,7 @@ class TargetHashrateInputs:
     needed: Hashrate
     price: HashratePrice
     max_bids_count: int
-    annotated_bids: tuple[BidWithCooldown, ...]
+    bids_with_cooldowns: tuple[BidWithCooldown, ...]
 
 
 @dataclass(frozen=True)
@@ -55,8 +55,7 @@ def resolve_cooldowns(
 
     Call ``get_bid_history`` and derive the authoritative answer from the bid's
     history. If the history fetch raises an ``ApiError``, fall back to a per-field
-    conservative estimate: each flag is True unless its tier-1 predicate proves it
-    free.
+    conservative estimate: each flag is True.
     """
     bids_with_cooldown: list[BidWithCooldown] = []
     for bid in bids:
@@ -102,8 +101,8 @@ def set_bids_target(
         1. Read Ocean's 24h hashrate.
         2. Find the cheapest served bid in the order book and undercut it by 1 sat.
         3. Compute needed hashrate.
-        4. Resolve per-bid cooldowns: fetches /spot/bid/detail history for the rest and
-           derives authoritative per-field timestamps.
+        4. Resolve per-bid cooldowns: fetches /spot/bid/detail history and derives 
+        authoritative per-field timestamps.
         5. Build a cooldown-aware SetBidsConfig and hand it to reconciliation.
 
     `now` defaults to the current UTC time; tests inject a fixed value.
@@ -138,7 +137,7 @@ def set_bids_target(
         needed=total_hashrate_to_set,
         price=price_to_set_bids_to,
         max_bids_count=config.max_bids_count,
-        annotated_bids=bids_with_cooldowns,
+        bids_with_cooldowns=bids_with_cooldowns,
     )
 
     set_bids_result = reconcile(client, computed, dry_run)
