@@ -87,7 +87,6 @@ def resolve_cooldowns(
         annotated.append(
             BidWithCooldown(
                 bid=bid,
-                cooldown=cooldown,
                 is_price_in_cooldown=cooldown.price_cooldown,
                 is_speed_in_cooldown=cooldown.speed_cooldown,
             )

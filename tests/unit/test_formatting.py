@@ -24,7 +24,7 @@ from hashbidder.formatting import (
     format_set_bids_result,
     format_set_bids_target_result_verbose,
 )
-from hashbidder.target_hashrate import BidWithCooldown, CooldownInfo
+from hashbidder.target_hashrate import BidWithCooldown
 from hashbidder.use_cases.set_bids_target import (
     SetBidsTargetResult,
     TargetHashrateInputs,
@@ -439,10 +439,6 @@ class TestFormatTargetHashrateVerbose:
         return (
             BidWithCooldown(
                 bid=bid,
-                cooldown=CooldownInfo(
-                    price_cooldown=price_cooldown,
-                    speed_cooldown=speed_cooldown,
-                ),
                 is_price_in_cooldown=price_cooldown,
                 is_speed_in_cooldown=speed_cooldown,
             ),

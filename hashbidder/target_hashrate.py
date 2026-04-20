@@ -64,7 +64,6 @@ class BidWithCooldown:
     """A bid paired with its current cooldown status."""
 
     bid: UserBid
-    cooldown: CooldownInfo
     is_price_in_cooldown: bool
     is_speed_in_cooldown: bool
 

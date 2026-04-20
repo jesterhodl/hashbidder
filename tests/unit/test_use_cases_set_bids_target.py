@@ -343,8 +343,8 @@ class TestHistoryFetchWiring:
 
         assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
-        assert annotated.cooldown.price_cooldown is False
-        assert annotated.cooldown.speed_cooldown is False
+        assert annotated.is_price_in_cooldown is False
+        assert annotated.is_speed_in_cooldown is False
 
     def test_recent_speed_decrease_sets_speed_cooldown_only(self) -> None:
         """Tier-1 ambiguous + history shows a speed decrease → speed locked only."""
@@ -370,8 +370,8 @@ class TestHistoryFetchWiring:
 
         assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
-        assert annotated.cooldown.speed_cooldown is True
-        assert annotated.cooldown.price_cooldown is False
+        assert annotated.is_speed_in_cooldown is True
+        assert annotated.is_price_in_cooldown is False
 
     def test_api_error_on_detail_falls_back_to_tier1(self) -> None:
         """History fetch failure → conservative tier-1 flags, no crash."""
@@ -393,8 +393,8 @@ class TestHistoryFetchWiring:
         assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
         # Conservative fallback: bid is within both decrease windows → both True.
-        assert annotated.cooldown.price_cooldown is True
-        assert annotated.cooldown.speed_cooldown is True
+        assert annotated.is_price_in_cooldown is True
+        assert annotated.is_speed_in_cooldown is True
 
 
 class TestRegressionProxyFalsePositive:
@@ -440,8 +440,8 @@ class TestRegressionProxyFalsePositive:
         # Tier-2 consulted once and cleared both flags.
         assert _history_call_count(client) == 1
         (annotated,) = result.inputs.annotated_bids
-        assert annotated.cooldown.price_cooldown is False
-        assert annotated.cooldown.speed_cooldown is False
+        assert annotated.is_price_in_cooldown is False
+        assert annotated.is_speed_in_cooldown is False
 
         # The bid is no longer pinned: planner treats it as a fresh slot and
         # the reconciler edits it down to the market price and distributed speed.
