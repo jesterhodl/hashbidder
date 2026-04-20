@@ -126,7 +126,7 @@ def cooldown_from_history(
 
 def plan_with_cooldowns(
     desired_price: HashratePrice,
-    needed: Hashrate,
+    hashrate_to_set: Hashrate,
     max_bids_count: int,
     bids: tuple[BidWithCooldown, ...],
 ) -> tuple[BidConfig, ...]:
@@ -161,8 +161,8 @@ def plan_with_cooldowns(
         for entry in speed_locked
     )
 
-    if needed > locked_speed_total:
-        remaining = needed - locked_speed_total
+    if hashrate_to_set > locked_speed_total:
+        remaining = hashrate_to_set - locked_speed_total
     else:
         remaining = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
 

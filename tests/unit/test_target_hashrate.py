@@ -407,7 +407,7 @@ class TestPlanWithCooldowns:
         """No cooldowns → result mirrors plain distribute_bids at desired_price."""
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("5"),
+            hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
             bids=(),
         )
@@ -422,7 +422,7 @@ class TestPlanWithCooldowns:
         bid = make_user_bid("B1", 900, "2.0", last_updated=_NOW - timedelta(seconds=10))
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("4"),
+            hashrate_to_set=_ph_s("4"),
             max_bids_count=2,
             bids=(_annotated(bid, price_cd=True, speed_cd=False),),
         )
@@ -437,7 +437,7 @@ class TestPlanWithCooldowns:
         bid = make_user_bid("B1", 500, "3.0", last_updated=_NOW - timedelta(seconds=10))
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("5"),
+            hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
             bids=(_annotated(bid, price_cd=False, speed_cd=True),),
         )
@@ -454,7 +454,7 @@ class TestPlanWithCooldowns:
         bid = make_user_bid("B1", 900, "3.0", last_updated=_NOW - timedelta(seconds=10))
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("5"),
+            hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
             bids=(_annotated(bid, price_cd=True, speed_cd=True),),
         )
@@ -473,7 +473,7 @@ class TestPlanWithCooldowns:
         b2 = make_user_bid("B2", 900, "3.0", last_updated=_NOW - timedelta(seconds=10))
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("5"),
+            hashrate_to_set=_ph_s("5"),
             max_bids_count=2,
             bids=(
                 _annotated(b1, price_cd=True, speed_cd=True),
@@ -490,7 +490,7 @@ class TestPlanWithCooldowns:
         )
         result = plan_with_cooldowns(
             desired_price=DESIRED_PRICE,
-            needed=_ph_s("5"),
+            hashrate_to_set=_ph_s("5"),
             max_bids_count=3,
             bids=(_annotated(bid, price_cd=False, speed_cd=True),),
         )
