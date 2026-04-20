@@ -65,6 +65,8 @@ class BidWithCooldown:
 
     bid: UserBid
     cooldown: CooldownInfo
+    is_price_in_cooldown: bool
+    is_speed_in_cooldown: bool
 
 
 def is_price_guaranteed_free(
@@ -144,9 +146,9 @@ def plan_with_cooldowns(
     first to price-locked bids (preserving their old price), then to brand-new
     slots at `desired_price`.
     """
-    speed_locked = [b for b in bids if b.cooldown.speed_cooldown]
+    speed_locked = [b for b in bids if b.is_speed_in_cooldown]
     price_locked_only = [
-        b for b in bids if b.cooldown.price_cooldown and not b.cooldown.speed_cooldown
+        b for b in bids if b.is_price_in_cooldown and not b.is_speed_in_cooldown
     ]
 
     locked_speed_total = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
@@ -155,7 +157,7 @@ def plan_with_cooldowns(
 
     locked_entries = tuple(
         BidConfig(
-            price=entry.bid.price if entry.cooldown.price_cooldown else desired_price,
+            price=entry.bid.price if entry.is_price_in_cooldown else desired_price,
             speed_limit=entry.bid.speed_limit_ph,
         )
         for entry in speed_locked

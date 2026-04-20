@@ -443,6 +443,8 @@ class TestFormatTargetHashrateVerbose:
                     price_cooldown=price_cooldown,
                     speed_cooldown=speed_cooldown,
                 ),
+                is_price_in_cooldown=price_cooldown,
+                is_speed_in_cooldown=speed_cooldown,
             ),
         )
 

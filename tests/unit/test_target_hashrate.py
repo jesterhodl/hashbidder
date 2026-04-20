@@ -245,6 +245,8 @@ def _annotated(bid: object, price_cd: bool, speed_cd: bool) -> BidWithCooldown:
     return BidWithCooldown(
         bid=bid,  # type: ignore[arg-type]
         cooldown=CooldownInfo(price_cooldown=price_cd, speed_cooldown=speed_cd),
+        is_price_in_cooldown=price_cd,
+        is_speed_in_cooldown=speed_cd,
     )
 
 

@@ -84,7 +84,14 @@ def resolve_cooldowns(
                 )
             else:
                 cooldown = cooldown_from_history(history, settings, now)
-        annotated.append(BidWithCooldown(bid=bid, cooldown=cooldown))
+        annotated.append(
+            BidWithCooldown(
+                bid=bid,
+                cooldown=cooldown,
+                is_price_in_cooldown=cooldown.price_cooldown,
+                is_speed_in_cooldown=cooldown.speed_cooldown,
+            )
+        )
     return tuple(annotated)
 
 

@@ -438,12 +438,11 @@ def _format_target_cooldowns(annotated: tuple[BidWithCooldown, ...]) -> str:
         return "\n".join(lines)
     for entry in annotated:
         bid = entry.bid
-        cd = entry.cooldown
-        if cd.price_cooldown and cd.speed_cooldown:
+        if entry.is_price_in_cooldown and entry.is_speed_in_cooldown:
             status = "price+speed locked"
-        elif cd.price_cooldown:
+        elif entry.is_price_in_cooldown:
             status = "price locked (speed free)"
-        elif cd.speed_cooldown:
+        elif entry.is_speed_in_cooldown:
             status = "speed locked (price free)"
         else:
             status = "free"
