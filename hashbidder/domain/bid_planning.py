@@ -31,20 +31,18 @@ class EditAction:
     bid: UserBid
     new_price: HashratePrice
     new_speed_limit_ph: Hashrate
-    old_price: HashratePrice
-    old_speed_limit_ph: Hashrate
 
     @property
     def price_changed(self) -> bool:
         """Whether the price differs."""
-        return self.old_price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats != (
+        return self.bid.price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats != (
             self.new_price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats
         )
 
     @property
     def speed_limit_changed(self) -> bool:
         """Whether the speed limit differs."""
-        return self.old_speed_limit_ph != self.new_speed_limit_ph
+        return self.bid.speed_limit_ph != self.new_speed_limit_ph
 
 
 @dataclass(frozen=True)
@@ -169,8 +167,6 @@ def plan_bid_changes(
                 bid=bid,
                 new_price=config_entry.price,
                 new_speed_limit_ph=config_entry.speed_limit,
-                old_price=bid.price,
-                old_speed_limit_ph=bid.speed_limit_ph,
             )
         )
 

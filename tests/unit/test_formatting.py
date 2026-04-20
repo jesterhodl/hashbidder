@@ -60,8 +60,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=bid.speed_limit_ph,
                 ),
@@ -86,8 +84,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=bid.price,
                     new_speed_limit_ph=Hashrate(
                         Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND
@@ -112,8 +108,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=Hashrate(
                         Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND
@@ -236,8 +230,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid_edit,
-                    old_price=bid_edit.price,
-                    old_speed_limit_ph=bid_edit.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=bid_edit.speed_limit_ph,
                 ),

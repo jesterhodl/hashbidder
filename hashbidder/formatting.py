@@ -45,7 +45,7 @@ def _to_ph_day(price: HashratePrice) -> Sats:
 
 
 def _format_edit(edit: EditAction) -> str:
-    old_price = _to_ph_day(edit.old_price)
+    old_price = _to_ph_day(edit.bid.price)
     new_price = _to_ph_day(edit.new_price)
 
     if edit.price_changed:
@@ -54,13 +54,13 @@ def _format_edit(edit: EditAction) -> str:
         price_line = f"  price:       {old_price} sat/PH/Day (unchanged)"
 
     if edit.speed_limit_changed:
-        old_speed = _fmt_speed(edit.old_speed_limit_ph.value)
+        old_speed = _fmt_speed(edit.bid.speed_limit_ph.value)
         new_speed = _fmt_speed(edit.new_speed_limit_ph.value)
         speed_line = f"  speed_limit: {old_speed} \u2192 {new_speed} PH/s"
     else:
         speed_line = (
             f"  speed_limit: "
-            f"{_fmt_speed(edit.old_speed_limit_ph.value)} PH/s (unchanged)"
+            f"{_fmt_speed(edit.bid.speed_limit_ph.value)} PH/s (unchanged)"
         )
 
     upstream_line = "  upstream:    (unchanged)"
@@ -160,10 +160,10 @@ def format_plan(plan: ReconciliationPlan, skipped_bids: tuple[UserBid, ...]) -> 
         speed = _fmt_speed(edit.new_speed_limit_ph.value)
         changes: list[str] = []
         if edit.price_changed:
-            old = _to_ph_day(edit.old_price)
+            old = _to_ph_day(edit.bid.price)
             changes.append(f"price {old}\u2192{price}")
         if edit.speed_limit_changed:
-            old_s = _fmt_speed(edit.old_speed_limit_ph.value)
+            old_s = _fmt_speed(edit.bid.speed_limit_ph.value)
             new_s = _fmt_speed(edit.new_speed_limit_ph.value)
             changes.append(f"speed_limit {old_s}\u2192{new_s}")
         annotation = "EDITED, " + ", ".join(changes)
