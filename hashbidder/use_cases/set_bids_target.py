@@ -180,54 +180,27 @@ def set_bids_target(
 
     if len(remaining_bids) == 1:
         the_bid = remaining_bids[0]
-        is_fully_flexible = (
-            not the_bid.is_price_in_cooldown and not the_bid.is_speed_in_cooldown
+        new_price = (
+            the_bid.bid.price
+            if the_bid.is_price_in_cooldown and price_to_set_bids_to < the_bid.bid.price
+            else price_to_set_bids_to
         )
-        is_fully_locked = the_bid.is_price_in_cooldown and the_bid.is_speed_in_cooldown
-        desired_price_change_is_increase = the_bid.bid.price < price_to_set_bids_to
-        desired_speed_change_is_increase = (
-            the_bid.bid.speed_limit_ph < total_hashrate_to_set
+        new_speed = (
+            the_bid.bid.speed_limit_ph
+            if the_bid.is_speed_in_cooldown
+            and total_hashrate_to_set < the_bid.bid.speed_limit_ph
+            else total_hashrate_to_set
         )
-        the_bid_is_price_aligned = the_bid.bid.price == price_to_set_bids_to
-        the_bid_is_speed_aligned = the_bid.bid.speed_limit_ph == total_hashrate_to_set
-
-        if is_fully_flexible or (
-            desired_price_change_is_increase and desired_speed_change_is_increase
-        ):
-            if the_bid_is_price_aligned and the_bid_is_speed_aligned:
-                skipped_bids = (the_bid.bid,)
-            else:
-                edit_actions = (
-                    EditAction(
-                        bid=the_bid.bid,
-                        new_price=price_to_set_bids_to,
-                        new_speed_limit_ph=total_hashrate_to_set,
-                    ),
-                )
-        elif is_fully_locked:
+        if new_price == the_bid.bid.price and new_speed == the_bid.bid.speed_limit_ph:
             skipped_bids = (the_bid.bid,)
-        elif the_bid.is_price_in_cooldown:
-            if the_bid_is_speed_aligned:
-                skipped_bids = (the_bid.bid,)
-            else:
-                edit_actions = (
-                    EditAction(
-                        bid=the_bid.bid,
-                        new_price=the_bid.bid.price,
-                        new_speed_limit_ph=total_hashrate_to_set,
-                    ),
-                )
-        elif the_bid.is_speed_in_cooldown:
-            if the_bid_is_price_aligned:
-                skipped_bids = (the_bid.bid,)
-            else:
-                edit_actions = (
-                    EditAction(
-                        bid=the_bid.bid,
-                        new_price=price_to_set_bids_to,
-                        new_speed_limit_ph=the_bid.bid.speed_limit_ph,
-                    ),
-                )
+        else:
+            edit_actions = (
+                EditAction(
+                    bid=the_bid.bid,
+                    new_price=new_price,
+                    new_speed_limit_ph=new_speed,
+                ),
+            )
 
     plan = ReconciliationPlan(
         cancels=cancel_actions,

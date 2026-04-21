@@ -123,8 +123,8 @@ class TestSetBidsTarget:
         assert len(creates) == 1
         assert creates[0].config.speed_limit == _ph_s("1")
 
-    def test_speed_cooldown_locks_existing_bid(self) -> None:
-        """Speed-only cooldown: bid keeps its speed; price is moved to market."""
+    def test_speed_cooldown_does_not_block_speed_increase(self) -> None:
+        """Speed cooldown blocks decreases only; an increase goes through."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 800, "3.0", last_updated=now - timedelta(seconds=30)
@@ -152,7 +152,7 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # Speed-locked: edit preserves speed, moves price to desired market.
+        # Speed cooldown doesn't block the increase (3 → 15); price moves too.
         plan = result.set_bids_result.plan
         assert plan.unchanged == ()
         assert plan.creates == ()
@@ -162,8 +162,8 @@ class TestSetBidsTarget:
         assert edit.bid is cooldown_bid
         assert edit.price_changed
         assert edit.new_price.sats == Sats(501_000)
-        assert not edit.speed_limit_changed
-        assert edit.new_speed_limit_ph == _ph_s("3")
+        assert edit.speed_limit_changed
+        assert edit.new_speed_limit_ph == _ph_s("15")
 
     def test_price_cooldown_only_keeps_price_speed_freely_assigned(self) -> None:
         """Price-only cooldown: bid keeps its price; speed moves to needed total."""
@@ -206,8 +206,8 @@ class TestSetBidsTarget:
         assert plan.cancels == ()
         assert plan.unchanged == ()
 
-    def test_both_cooldowns_lock_price_and_speed(self) -> None:
-        """Both cooldowns: bid is fully frozen; no other changes are planned."""
+    def test_both_cooldowns_block_decreases_but_allow_increase(self) -> None:
+        """Both cooldowns active: price decrease is blocked, speed increase goes through."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 900, "4.0", last_updated=now - timedelta(seconds=30)
@@ -227,16 +227,21 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # B1 stays at (900, 4); nothing else is added.
+        # Desired (501, 15): price down is blocked (900 kept), speed up is free (→ 15).
         plan = result.set_bids_result.plan
-        assert len(plan.unchanged) == 1
-        assert plan.unchanged[0] is cooldown_bid
-        assert plan.edits == ()
+        assert plan.unchanged == ()
         assert plan.creates == ()
         assert plan.cancels == ()
+        assert len(plan.edits) == 1
+        edit = plan.edits[0]
+        assert edit.bid is cooldown_bid
+        assert not edit.price_changed
+        assert edit.new_price.sats == Sats(900_000)
+        assert edit.speed_limit_changed
+        assert edit.new_speed_limit_ph == _ph_s("15")
 
     def test_multiple_locked_bids_cancel_extras_and_keep_survivor(self) -> None:
-        """Multiple existing locked bids: cancel all but one; survivor stays frozen."""
+        """Multiple existing locked bids: cancel all but one; survivor's speed rises."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         bids = (
             make_user_bid("B1", 600, "2.0", last_updated=now - timedelta(seconds=30)),
@@ -260,14 +265,20 @@ class TestSetBidsTarget:
 
         # Every bid has both cooldowns (tier-1 fallback since no history seeded)
         # and identical remaining amounts — the survivor is the first one.
+        # Desired (501, 15): survivor's price down is blocked, speed up is free.
         plan = result.set_bids_result.plan
         kept_id = bids[0].id
-        assert len(plan.unchanged) == 1
-        assert plan.unchanged[0].id == kept_id
+        assert plan.unchanged == ()
         assert {c.bid.id for c in plan.cancels} == {
             b.id for b in bids if b.id != kept_id
         }
-        assert plan.edits == ()
+        assert len(plan.edits) == 1
+        edit = plan.edits[0]
+        assert edit.bid.id == kept_id
+        assert not edit.price_changed
+        assert edit.new_price.sats == Sats(600_000)
+        assert edit.speed_limit_changed
+        assert edit.new_speed_limit_ph == _ph_s("15")
         assert plan.creates == ()
 
     def test_missing_24h_window_raises(self) -> None:
