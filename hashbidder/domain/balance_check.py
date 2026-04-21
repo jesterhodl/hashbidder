@@ -52,7 +52,7 @@ def _plan_burn_rate(plan: ReconciliationPlan) -> SatsBurnRate:
     return total
 
 
-def check_balance(plan: ReconciliationPlan, available_sat: Sats) -> BalanceCheck:
+def check_balance(plan: ReconciliationPlan, available_sats: Sats) -> BalanceCheck:
     """Compare the account balance to the sats needed to fund plan creates.
 
     `INSUFFICIENT` if the balance cannot cover the creates' `amount_sat`.
@@ -61,9 +61,9 @@ def check_balance(plan: ReconciliationPlan, available_sat: Sats) -> BalanceCheck
     """
     required = sum((int(c.amount) for c in plan.creates), start=0)
     burn_rate = _plan_burn_rate(plan)
-    runway = burn_rate.runway(available_sat)
+    runway = burn_rate.runway(available_sats)
 
-    if available_sat < required:
+    if available_sats < required:
         status = BalanceStatus.INSUFFICIENT
     elif runway < LOW_BALANCE_RUNWAY:
         status = BalanceStatus.LOW
@@ -72,7 +72,7 @@ def check_balance(plan: ReconciliationPlan, available_sat: Sats) -> BalanceCheck
 
     return BalanceCheck(
         required_sat=Sats(required),
-        available_sat=available_sat,
+        available_sat=available_sats,
         burn_rate=burn_rate,
         runway=runway,
         status=status,
