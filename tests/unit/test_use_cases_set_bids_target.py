@@ -58,12 +58,11 @@ def _orderbook(served_price_sat: int) -> OrderBook:
     )
 
 
-def _config(target_ph_s: str, max_bids_count: int = 3) -> TargetHashrateConfig:
+def _config(target_ph_s: str) -> TargetHashrateConfig:
     return TargetHashrateConfig(
         default_amount=Sats(100_000),
         upstream=UPSTREAM,
         target_hashrate=_ph_s(target_ph_s),
-        max_bids_count=max_bids_count,
     )
 
 
@@ -71,7 +70,7 @@ class TestSetBidsTarget:
     """Tests for set_bids_target."""
 
     def test_happy_path_below_target_creates_bids(self) -> None:
-        """Below target → plan creates bids at market price + 1."""
+        """Below target → plan creates one bid at market price + 1."""
         client = FakeClient(orderbook=_orderbook(served_price_sat=800_000))
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
@@ -84,20 +83,22 @@ class TestSetBidsTarget:
         assert inputs.price.sats == Sats(801_000)
 
         plan = result.set_bids_result.plan
-        assert len(plan.creates) == 3
-        for create in plan.creates:
-            assert create.config.price.sats == Sats(801_000)
-            assert create.config.speed_limit == _ph_s("5")
+        assert len(plan.creates) == 1
+        create = plan.creates[0]
+        assert create.config.price.sats == Sats(801_000)
+        assert create.config.speed_limit == _ph_s("15")
 
     def test_at_target_keeps_running(self) -> None:
-        """Current == target → needed equals target, plan still creates bids."""
+        """Current == target → needed equals target, plan still creates a bid."""
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("10"))
 
         result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
 
         assert result.inputs.needed == _ph_s("10")
-        assert len(result.set_bids_result.plan.creates) == 3
+        creates = result.set_bids_result.plan.creates
+        assert len(creates) == 1
+        assert creates[0].config.speed_limit == _ph_s("10")
 
     def test_far_above_target_creates_no_bids(self) -> None:
         """Current >= 2*target → needed clamps to zero and plan is empty."""
@@ -123,10 +124,17 @@ class TestSetBidsTarget:
         assert creates[0].config.speed_limit == _ph_s("1")
 
     def test_speed_cooldown_locks_existing_bid(self) -> None:
-        """A bid still in speed cooldown stays at its current speed in the plan."""
+        """Speed-only cooldown: bid keeps its speed; price is moved to market."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 800, "3.0", last_updated=now - timedelta(seconds=30)
+        )
+        # History: recent speed decrease, no price decrease.
+        history = _history(
+            (
+                _entry(now - timedelta(seconds=3600), 800_000, "6"),
+                _entry(now - timedelta(seconds=30), 800_000, "3"),
+            )
         )
         client = FakeClient(
             orderbook=_orderbook(served_price_sat=500_000),
@@ -136,6 +144,7 @@ class TestSetBidsTarget:
                 min_bid_speed_limit_decrease_period=timedelta(seconds=600),
                 price_tick=PriceTick(sats=Sats(1000)),
             ),
+            bid_histories={BidId("B1"): history},
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
@@ -143,22 +152,21 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # The locked bid (3 PH/s) should appear unchanged in the plan; the
-        # remainder (15-3=12 PH/s) is split across the other 2 slots.
+        # Speed-locked: edit preserves speed, moves price to desired market.
         plan = result.set_bids_result.plan
-        # B1 is matched: edit if its price differs from desired, else unchanged.
-        # Desired price = 500_001 sat/EH/Day = 500.001 sat/PH/Day, current is
-        # 800 sat/PH/Day = 800_000 sat/EH/Day. Price cooldown is also active,
-        # so plan_with_cooldowns leaves the price untouched at 800.
-        assert len(plan.unchanged) == 1
-        assert plan.unchanged[0] is cooldown_bid
-        # Two new creates at 6 PH/s each (12 / 2).
-        assert len(plan.creates) == 2
-        for create in plan.creates:
-            assert create.config.speed_limit == _ph_s("6")
+        assert plan.unchanged == ()
+        assert plan.creates == ()
+        assert plan.cancels == ()
+        assert len(plan.edits) == 1
+        edit = plan.edits[0]
+        assert edit.bid is cooldown_bid
+        assert edit.price_changed
+        assert edit.new_price.sats == Sats(501_000)
+        assert not edit.speed_limit_changed
+        assert edit.new_speed_limit_ph == _ph_s("3")
 
     def test_price_cooldown_only_keeps_price_speed_freely_assigned(self) -> None:
-        """Price-only cooldown: bid keeps its price; speed comes from distribution."""
+        """Price-only cooldown: bid keeps its price; speed moves to needed total."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 800, "4.0", last_updated=now - timedelta(seconds=30)
@@ -186,23 +194,20 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # needed=15, 3 free slots → 5 PH/s each. B1 keeps price 800, takes 5 PH/s.
+        # needed=15, single bid. Price locked at 800, speed moves to 15.
         plan = result.set_bids_result.plan
         assert len(plan.edits) == 1
         edit = plan.edits[0]
         assert edit.bid is cooldown_bid
         assert not edit.price_changed  # price preserved
         assert edit.speed_limit_changed
-        assert edit.new_speed_limit_ph == _ph_s("5")
-        # Two new creates at the market price.
-        assert len(plan.creates) == 2
-        for create in plan.creates:
-            assert create.config.speed_limit == _ph_s("5")
-            assert create.config.price.sats == Sats(501_000)
+        assert edit.new_speed_limit_ph == _ph_s("15")
+        assert plan.creates == ()
         assert plan.cancels == ()
+        assert plan.unchanged == ()
 
     def test_both_cooldowns_lock_price_and_speed(self) -> None:
-        """Both cooldowns: bid is fully frozen; remainder distributes to free slots."""
+        """Both cooldowns: bid is fully frozen; no other changes are planned."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 900, "4.0", last_updated=now - timedelta(seconds=30)
@@ -222,21 +227,16 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # B1 stays at (900, 4); remaining 11 PH/s split across 2 new slots.
+        # B1 stays at (900, 4); nothing else is added.
         plan = result.set_bids_result.plan
         assert len(plan.unchanged) == 1
         assert plan.unchanged[0] is cooldown_bid
         assert plan.edits == ()
-        assert len(plan.creates) == 2
-        for create in plan.creates:
-            assert create.config.price.sats == Sats(501_000)
-        free_total = sum((c.config.speed_limit.value for c in plan.creates), Decimal(0))
-        # distribute_bids quantizes to 0.01 PH/s (5.5 + 5.5 = 11).
-        assert abs(free_total - Decimal("11")) <= Decimal("0.02")
+        assert plan.creates == ()
         assert plan.cancels == ()
 
-    def test_all_bids_locked_no_new_creates(self) -> None:
-        """Extreme: every existing bid is fully frozen and fills max_bids_count."""
+    def test_multiple_locked_bids_cancel_extras_and_keep_survivor(self) -> None:
+        """Multiple existing locked bids: cancel all but one; survivor stays frozen."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         bids = (
             make_user_bid("B1", 600, "2.0", last_updated=now - timedelta(seconds=30)),
@@ -258,14 +258,17 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
-        # All slots consumed by frozen bids; reconciler sees an exact match
-        # for each → no edits, no creates, no cancels.
+        # Every bid has both cooldowns (tier-1 fallback since no history seeded)
+        # and identical remaining amounts — the survivor is the first one.
         plan = result.set_bids_result.plan
-        assert len(plan.unchanged) == 3
-        assert {u.id for u in plan.unchanged} == {b.id for b in bids}
+        kept_id = bids[0].id
+        assert len(plan.unchanged) == 1
+        assert plan.unchanged[0].id == kept_id
+        assert {c.bid.id for c in plan.cancels} == {
+            b.id for b in bids if b.id != kept_id
+        }
         assert plan.edits == ()
         assert plan.creates == ()
-        assert plan.cancels == ()
 
     def test_missing_24h_window_raises(self) -> None:
         """Ocean stats without a 24h window raises ValueError."""
@@ -432,20 +435,16 @@ class TestRegressionProxyFalsePositive:
         assert annotated.is_price_in_cooldown is False
         assert annotated.is_speed_in_cooldown is False
 
-        # The bid is no longer pinned: planner treats it as a fresh slot and
-        # the reconciler edits it down to the market price and distributed speed.
-        # needed=15, 3 slots → 5 PH/s each at desired price 501_000.
+        # The bid is no longer pinned: planner edits it down to the market
+        # price and the full needed hashrate (single-bid convergence).
         plan = result.set_bids_result.plan
         assert plan.unchanged == ()
+        assert plan.creates == ()
+        assert plan.cancels == ()
         assert len(plan.edits) == 1
         edit = plan.edits[0]
         assert edit.bid is bid
         assert edit.price_changed
         assert edit.new_price.sats == Sats(501_000)
         assert edit.speed_limit_changed
-        assert edit.new_speed_limit_ph == _ph_s("5")
-        assert len(plan.creates) == 2
-        for create in plan.creates:
-            assert create.config.price.sats == Sats(501_000)
-            assert create.config.speed_limit == _ph_s("5")
-        assert plan.cancels == ()
+        assert edit.new_speed_limit_ph == _ph_s("15")

@@ -389,7 +389,6 @@ class TestFormatTargetHashrateVerbose:
             target=ph_s("10"),
             needed=ph_s("15"),
             price=HashratePrice(sats=Sats(801), per=PH_DAY),
-            max_bids_count=3,
             bids_with_cooldowns=annotated,
         )
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
@@ -412,7 +411,6 @@ class TestFormatTargetHashrateVerbose:
         assert "Needed math:  2 * 10.0 (target) - 5.0 (ocean 24h) = 15.0 PH/s" in (
             output
         )
-        assert "Slot budget:  up to 3 bids" in output
         assert "=== Cooldown Status ===" in output
         assert "(no existing bids)" in output
 

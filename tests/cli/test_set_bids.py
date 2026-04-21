@@ -27,7 +27,6 @@ TARGET_TOML = """\
 mode = "target-hashrate"
 default_amount_sat = 100000
 target_hashrate_ph_s = 10
-max_bids_count = 3
 
 [upstream]
 url = "stratum+tcp://pool.example.com:3333"
@@ -350,7 +349,7 @@ class TestTargetHashrateMode:
         assert "Ocean 24h:" in result.output
         assert "Needed:" in result.output
         assert "801 sat/PH/Day" in result.output
-        assert result.output.count("CREATE:") == 3
+        assert result.output.count("CREATE:") == 1
         # Dry run did not execute anything.
         assert client.calls == []
 
@@ -371,8 +370,8 @@ class TestTargetHashrateMode:
 
         assert result.exit_code == 0, result.output
         assert "=== Target Hashrate Inputs ===" in result.output
-        assert "3 succeeded, 0 failed" in result.output
-        assert len(client.get_current_bids()) == 3
+        assert "1 succeeded, 0 failed" in result.output
+        assert len(client.get_current_bids()) == 1
 
     def test_verbose_dry_run_prints_reasoning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
