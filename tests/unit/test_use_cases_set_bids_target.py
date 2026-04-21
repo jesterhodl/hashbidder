@@ -151,7 +151,7 @@ class TestSetBidsTarget:
         # 800 sat/PH/Day = 800_000 sat/EH/Day. Price cooldown is also active,
         # so plan_with_cooldowns leaves the price untouched at 800.
         assert len(plan.unchanged) == 1
-        assert plan.unchanged[0].bid is cooldown_bid
+        assert plan.unchanged[0] is cooldown_bid
         # Two new creates at 6 PH/s each (12 / 2).
         assert len(plan.creates) == 2
         for create in plan.creates:
@@ -225,7 +225,7 @@ class TestSetBidsTarget:
         # B1 stays at (900, 4); remaining 11 PH/s split across 2 new slots.
         plan = result.set_bids_result.plan
         assert len(plan.unchanged) == 1
-        assert plan.unchanged[0].bid is cooldown_bid
+        assert plan.unchanged[0] is cooldown_bid
         assert plan.edits == ()
         assert len(plan.creates) == 2
         for create in plan.creates:
@@ -262,7 +262,7 @@ class TestSetBidsTarget:
         # for each → no edits, no creates, no cancels.
         plan = result.set_bids_result.plan
         assert len(plan.unchanged) == 3
-        assert {u.bid.id for u in plan.unchanged} == {b.id for b in bids}
+        assert {u.id for u in plan.unchanged} == {b.id for b in bids}
         assert plan.edits == ()
         assert plan.creates == ()
         assert plan.cancels == ()

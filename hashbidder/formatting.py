@@ -176,11 +176,11 @@ def format_plan(plan: ReconciliationPlan, skipped_bids: tuple[UserBid, ...]) -> 
         speed = _fmt_speed(create.config.speed_limit.value)
         state_lines.append(_format_final_state_line(price, speed, create.amount, "NEW"))
 
-    for unch in plan.unchanged:
-        price = _to_ph_day(unch.bid.price)
-        speed = _fmt_speed(unch.bid.speed_limit_ph.value)
+    for bid in plan.unchanged:
+        price = _to_ph_day(bid.price)
+        speed = _fmt_speed(bid.speed_limit_ph.value)
         state_lines.append(
-            _format_final_state_line(price, speed, unch.bid.amount_sat, "UNCHANGED")
+            _format_final_state_line(price, speed, bid.amount_sat, "UNCHANGED")
         )
 
     for bid in skipped_bids:

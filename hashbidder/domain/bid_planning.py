@@ -64,20 +64,13 @@ class CancelAction:
 
 
 @dataclass(frozen=True)
-class UnchangedBid:
-    """An existing bid that already matches the config."""
-
-    bid: UserBid
-
-
-@dataclass(frozen=True)
 class ReconciliationPlan:
     """The full set of changes needed to reach the desired state."""
 
     edits: tuple[EditAction, ...]
     creates: tuple[CreateAction, ...]
     cancels: tuple[CancelAction, ...]
-    unchanged: tuple[UnchangedBid, ...]
+    unchanged: tuple[UserBid, ...]
 
 
 def _field_diff_count(bid: UserBid, config_entry: BidConfig) -> int:
@@ -119,7 +112,7 @@ def plan_bid_changes(
     edits: list[EditAction] = []
     creates: list[CreateAction] = []
     cancels: list[CancelAction] = []
-    unchanged: list[UnchangedBid] = []
+    unchanged: list[UserBid] = []
 
     paired_bid_to_config: dict[str, int] = {}
 
@@ -159,7 +152,7 @@ def plan_bid_changes(
             continue
 
         if diffs == 0:
-            unchanged.append(UnchangedBid(bid=bid))
+            unchanged.append(bid)
             continue
 
         edits.append(

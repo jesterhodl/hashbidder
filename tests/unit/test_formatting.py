@@ -12,7 +12,6 @@ from hashbidder.domain.bid_planning import (
     CreateAction,
     EditAction,
     ReconciliationPlan,
-    UnchangedBid,
 )
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
@@ -201,7 +200,7 @@ class TestFormatPlan:
             edits=(),
             creates=(),
             cancels=(),
-            unchanged=(UnchangedBid(bid=bid),),
+            unchanged=(bid,),
         )
         output = format_plan(plan, ())
 
@@ -242,7 +241,7 @@ class TestFormatPlan:
                 ),
             ),
             cancels=(CancelAction(bid=bid_cancel, reason=CancelReason.UNMATCHED),),
-            unchanged=(UnchangedBid(bid=bid_unchanged),),
+            unchanged=(bid_unchanged,),
         )
         output = format_plan(plan, (bid_paused,))
 
