@@ -397,7 +397,6 @@ def format_set_bids_target_result_verbose(result: SetBidsTargetResult) -> str:
             ocean_24h=inputs.ocean_24h,
             needed=inputs.needed,
             price=inputs.price,
-            max_bids_count=inputs.max_bids_count,
         ),
         "",
         _format_target_cooldowns(inputs.bids_with_cooldowns),
@@ -412,7 +411,6 @@ def _format_target_distribution_math(
     ocean_24h: Hashrate,
     needed: Hashrate,
     price: HashratePrice,
-    max_bids_count: int,
 ) -> str:
     target_ph = target.to(HashUnit.PH, TimeUnit.SECOND).value
     ocean_ph = ocean_24h.to(HashUnit.PH, TimeUnit.SECOND).value
@@ -425,8 +423,7 @@ def _format_target_distribution_math(
         f"→ undercut by 1 sat → {price_ph_day} sat/PH/Day",
         f"  Needed math:  2 * {_fmt_speed(target_ph)} (target) "
         f"- {_fmt_speed(ocean_ph)} (ocean 24h) = {_fmt_speed(needed_ph)} PH/s",
-        f"  Slot budget:  up to {max_bids_count} bids "
-        f"(min 1 PH/s each, quantized to 0.01 PH/s)",
+        "(min 1 PH/s each, quantized to 0.01 PH/s)",
     ]
     return "\n".join(lines)
 
