@@ -149,25 +149,12 @@ def set_bids_target(
     edit_actions: tuple[EditAction, ...] = ()
     skipped_bids: tuple[UserBid, ...] = ()
 
-    if len(bids_with_cooldowns) > 1:
-        if we_need_no_hashrate:
-            cancel_actions = tuple(
-                CancelAction(bid=b.bid, reason=CancelReason.NEED_ZERO_HASHRATE)
-                for b in bids_with_cooldowns
-            )
-
-        kept_bid = min(bids_with_cooldowns, key=_keep_most_flexible_largest_bid)
-
+    if we_need_no_hashrate:
         cancel_actions = tuple(
-            CancelAction(bid=b.bid, reason=CancelReason.TOO_MANY_BIDS)
+            CancelAction(bid=b.bid, reason=CancelReason.NEED_ZERO_HASHRATE)
             for b in bids_with_cooldowns
-            if b is not kept_bid
         )
-        remaining_bids: tuple[BidWithCooldown, ...] = (kept_bid,)
-    else:
-        remaining_bids = bids_with_cooldowns
-
-    if len(remaining_bids) < 1 and not we_need_no_hashrate:
+    elif not bids_with_cooldowns:
         create_actions = (
             CreateAction(
                 config=BidConfig(
@@ -178,26 +165,31 @@ def set_bids_target(
                 upstream=config.upstream,
             ),
         )
-
-    if len(remaining_bids) == 1:
-        the_bid = remaining_bids[0]
+    else:
+        kept_bid = min(bids_with_cooldowns, key=_keep_most_flexible_largest_bid)
+        cancel_actions = tuple(
+            CancelAction(bid=b.bid, reason=CancelReason.TOO_MANY_BIDS)
+            for b in bids_with_cooldowns
+            if b is not kept_bid
+        )
         new_price = (
-            the_bid.bid.price
-            if the_bid.is_price_in_cooldown and price_to_set_bids_to < the_bid.bid.price
+            kept_bid.bid.price
+            if kept_bid.is_price_in_cooldown
+            and price_to_set_bids_to < kept_bid.bid.price
             else price_to_set_bids_to
         )
         new_speed = (
-            the_bid.bid.speed_limit_ph
-            if the_bid.is_speed_in_cooldown
-            and total_hashrate_to_set < the_bid.bid.speed_limit_ph
+            kept_bid.bid.speed_limit_ph
+            if kept_bid.is_speed_in_cooldown
+            and total_hashrate_to_set < kept_bid.bid.speed_limit_ph
             else total_hashrate_to_set
         )
-        if new_price == the_bid.bid.price and new_speed == the_bid.bid.speed_limit_ph:
-            skipped_bids = (the_bid.bid,)
+        if new_price == kept_bid.bid.price and new_speed == kept_bid.bid.speed_limit_ph:
+            skipped_bids = (kept_bid.bid,)
         else:
             edit_actions = (
                 EditAction(
-                    bid=the_bid.bid,
+                    bid=kept_bid.bid,
                     new_price=new_price,
                     new_speed_limit_ph=new_speed,
                 ),
