@@ -121,9 +121,12 @@ def set_bids_target(
         3. Compute needed hashrate.
         4. Resolve per-bid cooldowns: fetches /spot/bid/detail history and derives
            authoritative per-field timestamps.
-        5. Converge on a single bid: cancel extras (keeping the most flexible
-           and largest), create one if none exists, or edit/skip the survivor
-           subject to cooldown constraints.
+        5. Reconcile toward a single target bid:
+             - if needed hashrate is zero, cancel every manageable bid;
+             - else if no manageable bids exist, create one at (price, needed);
+             - else keep the most flexible/largest bid, cancel the rest, and
+               edit or skip the keeper. Cooldowns block decreases only; an
+               increase on a locked field always goes through.
         6. Check the account balance and, unless `dry_run`, execute the plan.
 
     `now` defaults to the current UTC time; tests inject a fixed value.

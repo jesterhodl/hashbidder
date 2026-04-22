@@ -207,7 +207,7 @@ class TestSetBidsTarget:
         assert plan.unchanged == ()
 
     def test_both_cooldowns_block_decreases_but_allow_increase(self) -> None:
-        """Both cooldowns active: price decrease is blocked, speed increase goes through."""
+        """Both cooldowns active: price decrease is blocked, speed increase works."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
             "B1", 900, "4.0", last_updated=now - timedelta(seconds=30)
