@@ -11,6 +11,7 @@ from hashbidder.client import (
     BidHistoryEntry,
     BidId,
     BidItem,
+    BidStatus,
     MarketSettings,
     OrderBook,
 )
@@ -90,6 +91,30 @@ class TestSetBidsTarget:
         create = plan.creates[0]
         assert create.config.price.sats == Sats(801_000)
         assert create.config.speed_limit == _ph_s("15")
+
+    def test_non_manageable_bids_flow_to_skipped_bids(self) -> None:
+        """PAUSED/FROZEN bids bypass planning and pass through for display."""
+        paused = make_user_bid("B1", 700, "2.0", status=BidStatus.PAUSED)
+        frozen = make_user_bid("B2", 800, "4.0", status=BidStatus.FROZEN)
+        active = make_user_bid("B3", 501, "15.0")
+        client = FakeClient(
+            orderbook=_orderbook(served_price_sat=500_000),
+            current_bids=(paused, frozen, active),
+        )
+        ocean = FakeOceanSource(account_stats=_account_stats("5"))
+
+        result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+
+        assert {b.id for b in result.set_bids_result.skipped_bids} == {
+            paused.id,
+            frozen.id,
+        }
+        # Only the ACTIVE bid reaches the planner (and already aligns with target).
+        plan = result.set_bids_result.plan
+        assert plan.unchanged == (active,)
+        assert plan.cancels == ()
+        assert plan.edits == ()
+        assert plan.creates == ()
 
     def test_missing_24h_window_raises(self) -> None:
         """Ocean stats without a 24h window raises ValueError."""
