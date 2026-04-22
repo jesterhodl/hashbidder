@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from hashbidder.bid_runner import SetBidsResult, execute_plan
+from hashbidder.bid_runner import ExecutionResult, SetBidsResult, execute_plan
 from hashbidder.client import ApiError, HashpowerClient, MarketSettings, UserBid
 from hashbidder.config import TargetHashrateConfig
 from hashbidder.domain.balance_check import check_balance
@@ -207,20 +207,16 @@ def set_bids_target(
         plan=plan,
         available_sats=available_balance.available_sat,
     )
-    if dry_run:
-        set_bids_result = SetBidsResult(
-            plan=plan,
-            skipped_bids=(),
-            balance_check=balance_check,
-        )
-    else:
-        execution = execute_plan(client, plan)
-        set_bids_result = SetBidsResult(
-            plan=plan,
-            skipped_bids=(),
-            balance_check=balance_check,
-            execution=execution,
-        )
+    execution_result: ExecutionResult | None = None
+    if not dry_run:
+        execution_result = execute_plan(client, plan)
+
+    set_bids_result = SetBidsResult(
+        plan=plan,
+        skipped_bids=(),
+        balance_check=balance_check,
+        execution=execution_result,
+    )
 
     inputs = TargetHashrateInputs(
         ocean_24h=ocean_24h,
