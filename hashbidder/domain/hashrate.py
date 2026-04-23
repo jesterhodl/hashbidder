@@ -143,7 +143,7 @@ class Hashrate:
         return self._as_hashes_per_second() >= other._as_hashes_per_second()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class HashratePrice:
     """A price denominated in satoshis per unit of hashrate.
 
@@ -160,6 +160,44 @@ class HashratePrice:
             raise ValueError(
                 f"HashratePrice must be non-negative, got {self.sats} sats"
             )
+
+    def _as_sats_per_hash_per_second(self) -> Fraction:
+        # sats / (per.value * per.hash_unit / per.time_unit)
+        # = sats * per.time_unit / (per.value * per.hash_unit)
+        src_hash = int(self.per.hash_unit.value)
+        src_time = int(self.per.time_unit.value)
+        src_value = Fraction(self.per.value)
+        return Fraction(int(self.sats)) * Fraction(src_time, src_hash) / src_value
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HashratePrice):
+            return NotImplemented
+        return (
+            self._as_sats_per_hash_per_second() == other._as_sats_per_hash_per_second()
+        )
+
+    def __hash__(self) -> int:
+        return hash(self._as_sats_per_hash_per_second())
+
+    def __lt__(self, other: HashratePrice) -> bool:
+        return (
+            self._as_sats_per_hash_per_second() < other._as_sats_per_hash_per_second()
+        )
+
+    def __le__(self, other: HashratePrice) -> bool:
+        return (
+            self._as_sats_per_hash_per_second() <= other._as_sats_per_hash_per_second()
+        )
+
+    def __gt__(self, other: HashratePrice) -> bool:
+        return (
+            self._as_sats_per_hash_per_second() > other._as_sats_per_hash_per_second()
+        )
+
+    def __ge__(self, other: HashratePrice) -> bool:
+        return (
+            self._as_sats_per_hash_per_second() >= other._as_sats_per_hash_per_second()
+        )
 
     def to(self, hash_unit: HashUnit, time_unit: TimeUnit) -> HashratePrice:
         """Convert to a price per different hashrate unit.

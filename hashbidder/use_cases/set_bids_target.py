@@ -2,22 +2,35 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 
-from hashbidder.bid_runner import SetBidsResult, reconcile
-from hashbidder.client import ApiError, HashpowerClient, MarketSettings, UserBid
-from hashbidder.config import SetBidsConfig, TargetHashrateConfig
+from hashbidder.bid_runner import ExecutionResult, SetBidsResult, execute_plan
+from hashbidder.client import (
+    AccountBalance,
+    ApiError,
+    HashpowerClient,
+    MarketSettings,
+    UserBid,
+)
+from hashbidder.config import TargetHashrateConfig
+from hashbidder.domain.balance_check import check_balance
+from hashbidder.domain.bid_config import BidConfig
+from hashbidder.domain.bid_planning import (
+    MANAGEABLE_STATUSES,
+    CancelAction,
+    CancelReason,
+    CreateAction,
+    EditAction,
+    ReconciliationPlan,
+)
 from hashbidder.domain.btc_address import BtcAddress
-from hashbidder.domain.hashrate import Hashrate, HashratePrice
+from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
+from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.ocean_client import OceanSource, OceanTimeWindow
 from hashbidder.target_hashrate import (
     BidWithCooldown,
-    CooldownInfo,
     compute_needed_hashrate,
-    cooldown_from_history,
     find_market_price,
-    is_price_guaranteed_free,
-    is_speed_guaranteed_free,
-    plan_with_cooldowns,
 )
 
 
@@ -29,8 +42,7 @@ class TargetHashrateInputs:
     target: Hashrate
     needed: Hashrate
     price: HashratePrice
-    max_bids_count: int
-    annotated_bids: tuple[BidWithCooldown, ...]
+    bids_with_cooldowns: tuple[BidWithCooldown, ...]
 
 
 @dataclass(frozen=True)
@@ -55,37 +67,164 @@ def resolve_cooldowns(
     now: datetime,
     client: HashpowerClient,
 ) -> tuple[BidWithCooldown, ...]:
-    """Per-bid cooldown annotation via a cheap tier-1 check, then tier-2 history.
+    """Per-bid cooldown annotation.
 
-    Per bid, in order:
-
-    1. **Cheap check.** If the tier-1 predicates prove both fields past
-       their decrease windows (i.e. ``last_updated`` is old enough),
-       emit ``CooldownInfo(False, False)`` — no history fetch needed.
-    2. **History fetch.** Otherwise, call ``get_bid_history`` and derive
-       the authoritative answer from the bid's history.
-    3. **Fetch failure fallback.** If the history fetch raises an
-       ``ApiError``, fall back to a per-field conservative estimate:
-       each flag is True unless its tier-1 predicate proves it free.
+    Call ``get_bid_history`` and derive the authoritative answer from the bid's
+    history. If the history fetch raises an ``ApiError``, fall back to a per-field
+    conservative estimate: each flag is True.
     """
-    annotated: list[BidWithCooldown] = []
+    bids_with_cooldown: list[BidWithCooldown] = []
     for bid in bids:
-        price_free = is_price_guaranteed_free(bid, settings, now)
-        speed_free = is_speed_guaranteed_free(bid, settings, now)
-        if price_free and speed_free:
-            cooldown = CooldownInfo(price_cooldown=False, speed_cooldown=False)
+        try:
+            history = client.get_bid_history(bid.id)
+        except ApiError:
+            is_this_bid_in_price_cooldown = True
+            is_this_bid_in_speed_cooldown = True
         else:
-            try:
-                history = client.get_bid_history(bid.id)
-            except ApiError:
-                cooldown = CooldownInfo(
-                    price_cooldown=not price_free,
-                    speed_cooldown=not speed_free,
-                )
-            else:
-                cooldown = cooldown_from_history(history, settings, now)
-        annotated.append(BidWithCooldown(bid=bid, cooldown=cooldown))
-    return tuple(annotated)
+            last_price_decrease_at = history.last_price_decrease_at()
+            is_this_bid_in_price_cooldown = (
+                last_price_decrease_at is not None
+                and now - last_price_decrease_at
+                < settings.min_bid_price_decrease_period
+            )
+            last_speed_decrease_at = history.last_speed_decrease_at()
+            is_this_bid_in_speed_cooldown = (
+                last_speed_decrease_at is not None
+                and now - last_speed_decrease_at
+                < settings.min_bid_speed_limit_decrease_period
+            )
+        bids_with_cooldown.append(
+            BidWithCooldown(
+                bid=bid,
+                is_price_in_cooldown=is_this_bid_in_price_cooldown,
+                is_speed_in_cooldown=is_this_bid_in_speed_cooldown,
+            )
+        )
+    return tuple(bids_with_cooldown)
+
+
+def _keep_most_flexible_largest_bid(b: BidWithCooldown) -> tuple[int, int]:
+    locks = int(b.is_price_in_cooldown) + int(b.is_speed_in_cooldown)
+    remaining = b.bid.amount_remaining_sat
+    if remaining is None:
+        remaining = b.bid.amount_sat
+    return (locks, -remaining)
+
+
+@dataclass(frozen=True)
+class _GatheredInputs:
+    inputs: TargetHashrateInputs
+    non_manageable_bids: tuple[UserBid, ...]
+    available_balance: AccountBalance
+
+
+def _gather_inputs(
+    client: HashpowerClient,
+    ocean: OceanSource,
+    address: BtcAddress,
+    config: TargetHashrateConfig,
+    now: datetime,
+) -> _GatheredInputs:
+    ocean_24h = _ocean_24h(ocean, address)
+    settings = client.get_market_settings()
+    orderbook = client.get_orderbook()
+    price = find_market_price(orderbook, settings.price_tick)
+    needed = compute_needed_hashrate(config.target_hashrate, ocean_24h)
+
+    current_bids = client.get_current_bids()
+    manageable_bids = tuple(b for b in current_bids if b.status in MANAGEABLE_STATUSES)
+    non_manageable_bids = tuple(
+        b for b in current_bids if b.status not in MANAGEABLE_STATUSES
+    )
+    bids_with_cooldowns = resolve_cooldowns(manageable_bids, settings, now, client)
+
+    return _GatheredInputs(
+        inputs=TargetHashrateInputs(
+            ocean_24h=ocean_24h,
+            target=config.target_hashrate,
+            needed=needed,
+            price=price,
+            bids_with_cooldowns=bids_with_cooldowns,
+        ),
+        non_manageable_bids=non_manageable_bids,
+        available_balance=client.get_account_balance(),
+    )
+
+
+def _plan_reconciliation(
+    inputs: TargetHashrateInputs,
+    config: TargetHashrateConfig,
+) -> ReconciliationPlan:
+    we_need_no_hashrate = inputs.needed == Hashrate(
+        value=Decimal(0), hash_unit=HashUnit.PH, time_unit=TimeUnit.SECOND
+    )
+
+    cancel_actions: tuple[CancelAction, ...] = ()
+    create_actions: tuple[CreateAction, ...] = ()
+    edit_actions: tuple[EditAction, ...] = ()
+    unchanged_bids: tuple[UserBid, ...] = ()
+
+    if we_need_no_hashrate:
+        cancel_actions = tuple(
+            CancelAction(bid=b.bid, reason=CancelReason.NEED_ZERO_HASHRATE)
+            for b in inputs.bids_with_cooldowns
+        )
+    elif not inputs.bids_with_cooldowns:
+        create_actions = (
+            CreateAction(
+                config=BidConfig(
+                    price=inputs.price,
+                    speed_limit=inputs.needed,
+                ),
+                amount=config.default_amount,
+                upstream=config.upstream,
+            ),
+        )
+    else:
+        kept_bid = min(inputs.bids_with_cooldowns, key=_keep_most_flexible_largest_bid)
+        cancel_actions = tuple(
+            CancelAction(bid=b.bid, reason=CancelReason.TOO_MANY_BIDS)
+            for b in inputs.bids_with_cooldowns
+            if b is not kept_bid
+        )
+        new_price = (
+            kept_bid.bid.price
+            if kept_bid.is_price_in_cooldown and inputs.price < kept_bid.bid.price
+            else inputs.price
+        )
+        new_speed = (
+            kept_bid.bid.speed_limit_ph
+            if kept_bid.is_speed_in_cooldown
+            and inputs.needed < kept_bid.bid.speed_limit_ph
+            else inputs.needed
+        )
+        if new_price == kept_bid.bid.price and new_speed == kept_bid.bid.speed_limit_ph:
+            unchanged_bids = (kept_bid.bid,)
+        else:
+            edit_actions = (
+                EditAction(
+                    bid=kept_bid.bid,
+                    new_price=new_price,
+                    new_speed_limit_ph=new_speed,
+                ),
+            )
+
+    return ReconciliationPlan(
+        cancels=cancel_actions,
+        edits=edit_actions,
+        creates=create_actions,
+        unchanged=unchanged_bids,
+    )
+
+
+def _apply_plan(
+    client: HashpowerClient,
+    plan: ReconciliationPlan,
+    dry_run: bool,
+) -> ExecutionResult | None:
+    if dry_run:
+        return None
+    return execute_plan(client, plan)
 
 
 def set_bids_target(
@@ -98,53 +237,34 @@ def set_bids_target(
 ) -> SetBidsTargetResult:
     """Plan reconciliation to drive the 24h Ocean hashrate toward target.
 
-    Steps:
-        1. Read Ocean's 24h hashrate.
-        2. Find the cheapest served bid in the order book and undercut it by 1 sat.
-        3. Compute needed hashrate.
-        4. Resolve per-bid cooldowns: tier-1 cheap predicates clear bids
-           that are provably not-in-cooldown with zero extra calls; tier-2
-           fetches /spot/bid/detail history for the rest and derives
-           authoritative per-field timestamps.
-        5. Build a cooldown-aware SetBidsConfig and hand it to reconciliation.
+    Three phases:
+        1. Gather inputs: read Ocean 24h, market settings, orderbook, current
+           bids (with per-bid cooldown annotations), and the account balance.
+        2. Plan: reconcile toward a single target bid. Cancel all if needed
+           hashrate is zero; create one if no bids exist; else keep the most
+           flexible/largest bid, cancel the rest, and edit/skip the keeper.
+           Cooldowns block decreases only; increases always go through.
+        3. Apply: unless `dry_run`, execute the plan.
 
     `now` defaults to the current UTC time; tests inject a fixed value.
     """
     if now is None:
         now = datetime.now(UTC)
 
-    ocean_24h = _ocean_24h(ocean, address)
-    settings = client.get_market_settings()
-    orderbook = client.get_orderbook()
-    price = find_market_price(orderbook, settings.price_tick)
-    needed = compute_needed_hashrate(config.target_hashrate, ocean_24h)
-
-    current_bids = client.get_current_bids()
-    annotated = resolve_cooldowns(current_bids, settings, now, client)
-    bids = plan_with_cooldowns(
-        desired_price=price,
-        needed=needed,
-        max_bids_count=config.max_bids_count,
-        bids=annotated,
+    gathered = _gather_inputs(client, ocean, address, config, now)
+    plan = _plan_reconciliation(gathered.inputs, config)
+    balance_check = check_balance(
+        plan=plan,
+        available_sats=gathered.available_balance.available_sat,
     )
-    for entry in bids:
-        settings.price_tick.assert_aligned(entry.price)
+    execution_result = _apply_plan(client, plan, dry_run)
 
-    computed = SetBidsConfig(
-        default_amount=config.default_amount,
-        upstream=config.upstream,
-        bids=bids,
-    )
-
-    inputs = TargetHashrateInputs(
-        ocean_24h=ocean_24h,
-        target=config.target_hashrate,
-        needed=needed,
-        price=price,
-        max_bids_count=config.max_bids_count,
-        annotated_bids=annotated,
-    )
     return SetBidsTargetResult(
-        inputs=inputs,
-        set_bids_result=reconcile(client, computed, dry_run),
+        inputs=gathered.inputs,
+        set_bids_result=SetBidsResult(
+            plan=plan,
+            skipped_bids=gathered.non_manageable_bids,
+            balance_check=balance_check,
+            execution=execution_result,
+        ),
     )

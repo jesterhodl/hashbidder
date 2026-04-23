@@ -34,7 +34,7 @@ class TestReconcile:
         plan = plan_bid_changes(make_config(make_bid_config(500, "5.0")), (bid,))
 
         assert len(plan.unchanged) == 1
-        assert plan.unchanged[0].bid is bid
+        assert plan.unchanged[0] is bid
         assert plan.edits == ()
         assert plan.creates == ()
         assert plan.cancels == ()
@@ -191,7 +191,7 @@ class TestReconcile:
         )
 
         assert len(plan.unchanged) == 1
-        assert plan.unchanged[0].bid is bid_unchanged
+        assert plan.unchanged[0] is bid_unchanged
 
         assert len(plan.edits) == 1
         assert plan.edits[0].bid is bid_edit
@@ -301,7 +301,7 @@ class TestReconcileProperties:
         plan = plan_bid_changes(cfg, bids)
 
         edited_ids = {e.bid.id for e in plan.edits}
-        unchanged_ids = {u.bid.id for u in plan.unchanged}
+        unchanged_ids = {u.id for u in plan.unchanged}
         canceled_ids = {c.bid.id for c in plan.cancels}
 
         manageable_ids = [b.id for b in bids if b.status in _MANAGEABLE]
@@ -326,7 +326,7 @@ class TestReconcileProperties:
 
         plan_ids = (
             {e.bid.id for e in plan.edits}
-            | {u.bid.id for u in plan.unchanged}
+            | {u.id for u in plan.unchanged}
             | {c.bid.id for c in plan.cancels}
         )
         assert non_manageable_ids.isdisjoint(plan_ids)

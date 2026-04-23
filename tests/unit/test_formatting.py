@@ -12,7 +12,6 @@ from hashbidder.domain.bid_planning import (
     CreateAction,
     EditAction,
     ReconciliationPlan,
-    UnchangedBid,
 )
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
@@ -24,7 +23,7 @@ from hashbidder.formatting import (
     format_set_bids_result,
     format_set_bids_target_result_verbose,
 )
-from hashbidder.target_hashrate import BidWithCooldown, CooldownInfo
+from hashbidder.target_hashrate import BidWithCooldown
 from hashbidder.use_cases.set_bids_target import (
     SetBidsTargetResult,
     TargetHashrateInputs,
@@ -60,8 +59,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=bid.speed_limit_ph,
                 ),
@@ -86,8 +83,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=bid.price,
                     new_speed_limit_ph=Hashrate(
                         Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND
@@ -112,8 +107,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid,
-                    old_price=bid.price,
-                    old_speed_limit_ph=bid.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=Hashrate(
                         Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND
@@ -207,7 +200,7 @@ class TestFormatPlan:
             edits=(),
             creates=(),
             cancels=(),
-            unchanged=(UnchangedBid(bid=bid),),
+            unchanged=(bid,),
         )
         output = format_plan(plan, ())
 
@@ -236,8 +229,6 @@ class TestFormatPlan:
             edits=(
                 EditAction(
                     bid=bid_edit,
-                    old_price=bid_edit.price,
-                    old_speed_limit_ph=bid_edit.speed_limit_ph,
                     new_price=HashratePrice(sats=Sats(500), per=PH_DAY),
                     new_speed_limit_ph=bid_edit.speed_limit_ph,
                 ),
@@ -250,7 +241,7 @@ class TestFormatPlan:
                 ),
             ),
             cancels=(CancelAction(bid=bid_cancel, reason=CancelReason.UNMATCHED),),
-            unchanged=(UnchangedBid(bid=bid_unchanged),),
+            unchanged=(bid_unchanged,),
         )
         output = format_plan(plan, (bid_paused,))
 
@@ -398,8 +389,7 @@ class TestFormatTargetHashrateVerbose:
             target=ph_s("10"),
             needed=ph_s("15"),
             price=HashratePrice(sats=Sats(801), per=PH_DAY),
-            max_bids_count=3,
-            annotated_bids=annotated,
+            bids_with_cooldowns=annotated,
         )
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
         return SetBidsTargetResult(
@@ -421,7 +411,6 @@ class TestFormatTargetHashrateVerbose:
         assert "Needed math:  2 * 10.0 (target) - 5.0 (ocean 24h) = 15.0 PH/s" in (
             output
         )
-        assert "Slot budget:  up to 3 bids" in output
         assert "=== Cooldown Status ===" in output
         assert "(no existing bids)" in output
 
@@ -439,10 +428,8 @@ class TestFormatTargetHashrateVerbose:
         return (
             BidWithCooldown(
                 bid=bid,
-                cooldown=CooldownInfo(
-                    price_cooldown=price_cooldown,
-                    speed_cooldown=speed_cooldown,
-                ),
+                is_price_in_cooldown=price_cooldown,
+                is_speed_in_cooldown=speed_cooldown,
             ),
         )
 

@@ -22,6 +22,8 @@ class CancelReason(Enum):
 
     UNMATCHED = "no matching config entry"
     UPSTREAM_MISMATCH = "upstream mismatch (cannot edit upstream)"
+    TOO_MANY_BIDS = "too many bids open, we want fewer"
+    NEED_ZERO_HASHRATE = "we need no hashrate at all right now"
 
 
 @dataclass(frozen=True)
@@ -31,20 +33,18 @@ class EditAction:
     bid: UserBid
     new_price: HashratePrice
     new_speed_limit_ph: Hashrate
-    old_price: HashratePrice
-    old_speed_limit_ph: Hashrate
 
     @property
     def price_changed(self) -> bool:
         """Whether the price differs."""
-        return self.old_price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats != (
+        return self.bid.price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats != (
             self.new_price.to(_PRICE_HASH_UNIT, _PRICE_TIME_UNIT).sats
         )
 
     @property
     def speed_limit_changed(self) -> bool:
         """Whether the speed limit differs."""
-        return self.old_speed_limit_ph != self.new_speed_limit_ph
+        return self.bid.speed_limit_ph != self.new_speed_limit_ph
 
 
 @dataclass(frozen=True)
@@ -66,20 +66,13 @@ class CancelAction:
 
 
 @dataclass(frozen=True)
-class UnchangedBid:
-    """An existing bid that already matches the config."""
-
-    bid: UserBid
-
-
-@dataclass(frozen=True)
 class ReconciliationPlan:
     """The full set of changes needed to reach the desired state."""
 
     edits: tuple[EditAction, ...]
     creates: tuple[CreateAction, ...]
     cancels: tuple[CancelAction, ...]
-    unchanged: tuple[UnchangedBid, ...]
+    unchanged: tuple[UserBid, ...]
 
 
 def _field_diff_count(bid: UserBid, config_entry: BidConfig) -> int:
@@ -121,7 +114,7 @@ def plan_bid_changes(
     edits: list[EditAction] = []
     creates: list[CreateAction] = []
     cancels: list[CancelAction] = []
-    unchanged: list[UnchangedBid] = []
+    unchanged: list[UserBid] = []
 
     paired_bid_to_config: dict[str, int] = {}
 
@@ -161,7 +154,7 @@ def plan_bid_changes(
             continue
 
         if diffs == 0:
-            unchanged.append(UnchangedBid(bid=bid))
+            unchanged.append(bid)
             continue
 
         edits.append(
@@ -169,8 +162,6 @@ def plan_bid_changes(
                 bid=bid,
                 new_price=config_entry.price,
                 new_speed_limit_ph=config_entry.speed_limit,
-                old_price=bid.price,
-                old_speed_limit_ph=bid.speed_limit_ph,
             )
         )
 

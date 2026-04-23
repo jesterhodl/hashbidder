@@ -45,7 +45,7 @@ def _to_ph_day(price: HashratePrice) -> Sats:
 
 
 def _format_edit(edit: EditAction) -> str:
-    old_price = _to_ph_day(edit.old_price)
+    old_price = _to_ph_day(edit.bid.price)
     new_price = _to_ph_day(edit.new_price)
 
     if edit.price_changed:
@@ -54,13 +54,13 @@ def _format_edit(edit: EditAction) -> str:
         price_line = f"  price:       {old_price} sat/PH/Day (unchanged)"
 
     if edit.speed_limit_changed:
-        old_speed = _fmt_speed(edit.old_speed_limit_ph.value)
+        old_speed = _fmt_speed(edit.bid.speed_limit_ph.value)
         new_speed = _fmt_speed(edit.new_speed_limit_ph.value)
         speed_line = f"  speed_limit: {old_speed} \u2192 {new_speed} PH/s"
     else:
         speed_line = (
             f"  speed_limit: "
-            f"{_fmt_speed(edit.old_speed_limit_ph.value)} PH/s (unchanged)"
+            f"{_fmt_speed(edit.bid.speed_limit_ph.value)} PH/s (unchanged)"
         )
 
     upstream_line = "  upstream:    (unchanged)"
@@ -160,10 +160,10 @@ def format_plan(plan: ReconciliationPlan, skipped_bids: tuple[UserBid, ...]) -> 
         speed = _fmt_speed(edit.new_speed_limit_ph.value)
         changes: list[str] = []
         if edit.price_changed:
-            old = _to_ph_day(edit.old_price)
+            old = _to_ph_day(edit.bid.price)
             changes.append(f"price {old}\u2192{price}")
         if edit.speed_limit_changed:
-            old_s = _fmt_speed(edit.old_speed_limit_ph.value)
+            old_s = _fmt_speed(edit.bid.speed_limit_ph.value)
             new_s = _fmt_speed(edit.new_speed_limit_ph.value)
             changes.append(f"speed_limit {old_s}\u2192{new_s}")
         annotation = "EDITED, " + ", ".join(changes)
@@ -176,11 +176,11 @@ def format_plan(plan: ReconciliationPlan, skipped_bids: tuple[UserBid, ...]) -> 
         speed = _fmt_speed(create.config.speed_limit.value)
         state_lines.append(_format_final_state_line(price, speed, create.amount, "NEW"))
 
-    for unch in plan.unchanged:
-        price = _to_ph_day(unch.bid.price)
-        speed = _fmt_speed(unch.bid.speed_limit_ph.value)
+    for bid in plan.unchanged:
+        price = _to_ph_day(bid.price)
+        speed = _fmt_speed(bid.speed_limit_ph.value)
         state_lines.append(
-            _format_final_state_line(price, speed, unch.bid.amount_sat, "UNCHANGED")
+            _format_final_state_line(price, speed, bid.amount_sat, "UNCHANGED")
         )
 
     for bid in skipped_bids:
@@ -397,10 +397,9 @@ def format_set_bids_target_result_verbose(result: SetBidsTargetResult) -> str:
             ocean_24h=inputs.ocean_24h,
             needed=inputs.needed,
             price=inputs.price,
-            max_bids_count=inputs.max_bids_count,
         ),
         "",
-        _format_target_cooldowns(inputs.annotated_bids),
+        _format_target_cooldowns(inputs.bids_with_cooldowns),
         "",
         format_set_bids_result(result.set_bids_result),
     ]
@@ -412,7 +411,6 @@ def _format_target_distribution_math(
     ocean_24h: Hashrate,
     needed: Hashrate,
     price: HashratePrice,
-    max_bids_count: int,
 ) -> str:
     target_ph = target.to(HashUnit.PH, TimeUnit.SECOND).value
     ocean_ph = ocean_24h.to(HashUnit.PH, TimeUnit.SECOND).value
@@ -425,8 +423,7 @@ def _format_target_distribution_math(
         f"→ undercut by 1 sat → {price_ph_day} sat/PH/Day",
         f"  Needed math:  2 * {_fmt_speed(target_ph)} (target) "
         f"- {_fmt_speed(ocean_ph)} (ocean 24h) = {_fmt_speed(needed_ph)} PH/s",
-        f"  Slot budget:  up to {max_bids_count} bids "
-        f"(min 1 PH/s each, quantized to 0.01 PH/s)",
+        "(min 1 PH/s each, quantized to 0.01 PH/s)",
     ]
     return "\n".join(lines)
 
@@ -438,12 +435,11 @@ def _format_target_cooldowns(annotated: tuple[BidWithCooldown, ...]) -> str:
         return "\n".join(lines)
     for entry in annotated:
         bid = entry.bid
-        cd = entry.cooldown
-        if cd.price_cooldown and cd.speed_cooldown:
+        if entry.is_price_in_cooldown and entry.is_speed_in_cooldown:
             status = "price+speed locked"
-        elif cd.price_cooldown:
+        elif entry.is_price_in_cooldown:
             status = "price locked (speed free)"
-        elif cd.speed_cooldown:
+        elif entry.is_speed_in_cooldown:
             status = "speed locked (price free)"
         else:
             status = "free"
