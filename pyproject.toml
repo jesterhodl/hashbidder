@@ -29,29 +29,15 @@ convention = "google"
 root_packages = ["hashbidder"]
 
 [[tool.importlinter.contracts]]
-name = "Domain has no outward dependencies"
-type = "forbidden"
-source_modules = ["hashbidder.domain"]
-forbidden_modules = [
-    "hashbidder.use_cases",
-    "hashbidder.client",
+name = "Hexagonal layers"
+type = "layers"
+layers = [
     "hashbidder.cli",
+    "hashbidder.use_cases",
     "hashbidder.services",
-    "hashbidder.clients.ocean",
-    "hashbidder.clients.mempool",
+    "hashbidder.clients",
+    "hashbidder.domain",
 ]
-
-[[tool.importlinter.contracts]]
-name = "Use cases must not import from CLI layer"
-type = "forbidden"
-source_modules = ["hashbidder.use_cases"]
-forbidden_modules = ["hashbidder.cli"]
-
-[[tool.importlinter.contracts]]
-name = "Services must not import from use_cases or CLI"
-type = "forbidden"
-source_modules = ["hashbidder.services"]
-forbidden_modules = ["hashbidder.use_cases", "hashbidder.cli"]
 
 [[tool.importlinter.contracts]]
 name = "Use cases are independent of each other"
