@@ -13,7 +13,7 @@ import httpx
 from dotenv import load_dotenv
 
 from hashbidder import use_cases
-from hashbidder.client import API_BASE, ApiError, BraiinsClient, HashpowerClient
+from hashbidder.braiins_client import API_BASE, ApiError, BraiinsClient, HashpowerClient
 from hashbidder.config import SetBidsConfig, TargetHashrateConfig, load_config
 from hashbidder.domain.balance_check import BalanceStatus
 from hashbidder.domain.btc_address import BtcAddress

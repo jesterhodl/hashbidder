@@ -8,7 +8,7 @@ from decimal import Decimal
 import httpx
 
 from hashbidder.bid_runner import ActionOutcome, ActionStatus, SetBidsResult
-from hashbidder.client import UserBid
+from hashbidder.braiins_client import UserBid
 from hashbidder.domain.balance_check import (
     LOW_BALANCE_RUNWAY,
     BalanceCheck,

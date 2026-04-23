@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from hashbidder.client import (
+from hashbidder.braiins_client import (
     AccountBalance,
     ApiError,
     BidHistory,
