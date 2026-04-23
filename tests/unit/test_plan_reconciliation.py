@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from hashbidder.config import TargetHashrateConfig
+from hashbidder.domain.bid_config import TargetHashrateConfig
 from hashbidder.domain.bid_planning import CancelReason
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats

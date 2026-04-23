@@ -19,7 +19,7 @@ ignore = ["D105"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
-"hashbidder/main.py" = ["S101"]
+"hashbidder/cli/main.py" = ["S101"]
 "hashbidder/domain/stratum_url.py" = ["S101"]
 
 [tool.ruff.lint.pydocstyle]
@@ -35,8 +35,7 @@ source_modules = ["hashbidder.domain"]
 forbidden_modules = [
     "hashbidder.use_cases",
     "hashbidder.client",
-    "hashbidder.main",
-    "hashbidder.config",
+    "hashbidder.cli",
     "hashbidder.bid_runner",
     "hashbidder.clients.ocean",
     "hashbidder.clients.mempool",
@@ -47,7 +46,7 @@ forbidden_modules = [
 name = "Use cases must not import from CLI layer"
 type = "forbidden"
 source_modules = ["hashbidder.use_cases"]
-forbidden_modules = ["hashbidder.main"]
+forbidden_modules = ["hashbidder.cli"]
 
 [[tool.importlinter.contracts]]
 name = "Use cases are independent of each other"
@@ -75,10 +74,11 @@ dev = [
     "hypothesis>=6.151.11",
     "import-linter>=2.11",
     "mypy>=1.20.0",
+    "pydeps>=3.0.3",
     "pytest>=9.0.2",
     "ruff>=0.15.9",
 ]
 
 [project.scripts]
-hashbidder = "hashbidder.main:main"
+hashbidder = "hashbidder.cli.main:main"
 

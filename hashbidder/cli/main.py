@@ -13,6 +13,7 @@ import httpx
 from dotenv import load_dotenv
 
 from hashbidder import use_cases
+from hashbidder.cli.config import load_config
 from hashbidder.clients.braiins import (
     API_BASE,
     ApiError,
@@ -31,8 +32,8 @@ from hashbidder.clients.ocean import (
     OceanError,
     OceanSource,
 )
-from hashbidder.config import SetBidsConfig, TargetHashrateConfig, load_config
 from hashbidder.domain.balance_check import BalanceStatus
+from hashbidder.domain.bid_config import SetBidsConfig, TargetHashrateConfig
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import HashUnit
 from hashbidder.domain.time_unit import TimeUnit

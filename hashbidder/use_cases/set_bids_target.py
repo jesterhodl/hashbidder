@@ -13,9 +13,8 @@ from hashbidder.clients.braiins import (
     UserBid,
 )
 from hashbidder.clients.ocean import OceanSource, OceanTimeWindow
-from hashbidder.config import TargetHashrateConfig
 from hashbidder.domain.balance_check import check_balance
-from hashbidder.domain.bid_config import BidConfig
+from hashbidder.domain.bid_config import BidConfig, TargetHashrateConfig
 from hashbidder.domain.bid_planning import (
     MANAGEABLE_STATUSES,
     CancelAction,
