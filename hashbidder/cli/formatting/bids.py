@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
-from hashbidder.bid_runner import ActionOutcome, ActionStatus, SetBidsResult
 from hashbidder.cli.formatting._common import fmt_speed, to_ph_day
 from hashbidder.clients.braiins import UserBid
 from hashbidder.domain.balance_check import (
@@ -21,6 +20,7 @@ from hashbidder.domain.bid_planning import (
     ReconciliationPlan,
 )
 from hashbidder.domain.sats import Sats
+from hashbidder.services.bid_runner import ActionOutcome, ActionStatus, SetBidsResult
 
 
 def _format_edit(edit: EditAction) -> str:

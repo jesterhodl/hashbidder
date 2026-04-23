@@ -36,7 +36,7 @@ forbidden_modules = [
     "hashbidder.use_cases",
     "hashbidder.client",
     "hashbidder.cli",
-    "hashbidder.bid_runner",
+    "hashbidder.services",
     "hashbidder.clients.ocean",
     "hashbidder.clients.mempool",
 ]
@@ -46,6 +46,12 @@ name = "Use cases must not import from CLI layer"
 type = "forbidden"
 source_modules = ["hashbidder.use_cases"]
 forbidden_modules = ["hashbidder.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Services must not import from use_cases or CLI"
+type = "forbidden"
+source_modules = ["hashbidder.services"]
+forbidden_modules = ["hashbidder.use_cases", "hashbidder.cli"]
 
 [[tool.importlinter.contracts]]
 name = "Use cases are independent of each other"

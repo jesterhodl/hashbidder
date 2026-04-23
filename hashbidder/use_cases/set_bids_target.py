@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from hashbidder.bid_runner import ExecutionResult, SetBidsResult, execute_plan
 from hashbidder.clients.braiins import (
     AccountBalance,
     ApiError,
@@ -26,6 +25,7 @@ from hashbidder.domain.bid_planning import (
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.time_unit import TimeUnit
+from hashbidder.services.bid_runner import ExecutionResult, SetBidsResult, execute_plan
 from hashbidder.target_hashrate import (
     BidWithCooldown,
     compute_needed_hashrate,
