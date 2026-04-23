@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from hashbidder.braiins_client import AccountBalance, BidItem, OrderBook
+from hashbidder.clients.braiins import AccountBalance, BidItem, OrderBook
 from hashbidder.clients.ocean import AccountStats, HashrateWindow, OceanTimeWindow
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats

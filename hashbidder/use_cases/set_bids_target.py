@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from hashbidder.bid_runner import ExecutionResult, SetBidsResult, execute_plan
-from hashbidder.braiins_client import (
+from hashbidder.clients.braiins import (
     AccountBalance,
     ApiError,
     HashpowerClient,

@@ -5,7 +5,7 @@ from hashbidder.bid_runner import (
     ActionStatus,
     execute_plan,
 )
-from hashbidder.braiins_client import (
+from hashbidder.clients.braiins import (
     ApiError,
     ClOrderId,
     CreateBidResult,

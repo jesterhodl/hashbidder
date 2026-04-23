@@ -13,7 +13,12 @@ import httpx
 from dotenv import load_dotenv
 
 from hashbidder import use_cases
-from hashbidder.braiins_client import API_BASE, ApiError, BraiinsClient, HashpowerClient
+from hashbidder.clients.braiins import (
+    API_BASE,
+    ApiError,
+    BraiinsClient,
+    HashpowerClient,
+)
 from hashbidder.clients.ocean import (
     DEFAULT_OCEAN_URL,
     OceanClient,

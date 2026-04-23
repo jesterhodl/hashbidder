@@ -1,6 +1,6 @@
 """Ping and current-bids use cases."""
 
-from hashbidder.braiins_client import HashpowerClient, OrderBook, UserBid
+from hashbidder.clients.braiins import HashpowerClient, OrderBook, UserBid
 
 
 def ping(client: HashpowerClient) -> OrderBook:

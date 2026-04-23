@@ -8,7 +8,7 @@ from urllib.parse import quote
 import httpx
 import pytest
 
-from hashbidder.braiins_client import (
+from hashbidder.clients.braiins import (
     ApiError,
     BidId,
     BraiinsClient,
