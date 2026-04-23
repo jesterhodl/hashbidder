@@ -83,20 +83,20 @@ class TestSetBidsTarget:
         inputs = result.inputs
         assert inputs.ocean_24h == _ph_s("5")
         assert inputs.target == _ph_s("10")
-        assert inputs.needed == _ph_s("15")
+        assert inputs.needed == _ph_s("45")
         assert inputs.price.sats == Sats(801_000)
 
         plan = result.set_bids_result.plan
         assert len(plan.creates) == 1
         create = plan.creates[0]
         assert create.config.price.sats == Sats(801_000)
-        assert create.config.speed_limit == _ph_s("15")
+        assert create.config.speed_limit == _ph_s("45")
 
     def test_non_manageable_bids_flow_to_skipped_bids(self) -> None:
         """PAUSED/FROZEN bids bypass planning and pass through for display."""
         paused = make_user_bid("B1", 700, "2.0", status=BidStatus.PAUSED)
         frozen = make_user_bid("B2", 800, "4.0", status=BidStatus.FROZEN)
-        active = make_user_bid("B3", 501, "15.0")
+        active = make_user_bid("B3", 501, "45.0")
         client = FakeClient(
             orderbook=_orderbook(served_price_sat=500_000),
             current_bids=(paused, frozen, active),
@@ -293,4 +293,4 @@ class TestRegressionProxyFalsePositive:
         assert edit.price_changed
         assert edit.new_price.sats == Sats(501_000)
         assert edit.speed_limit_changed
-        assert edit.new_speed_limit_ph == _ph_s("15")
+        assert edit.new_speed_limit_ph == _ph_s("45")
