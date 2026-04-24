@@ -32,13 +32,15 @@ from hashbidder.services.target_hashrate import BidWithCooldown, find_market_pri
 
 @dataclass(frozen=True)
 class TargetHashrateInputs:
-    """The values that drove a target-hashrate planning run."""
+    """The values read from upstream sources for a target-hashrate run."""
 
     ocean_24h: Hashrate
     target: Hashrate
     needed_hashrate: Hashrate
     price: HashratePrice
     bids_with_cooldowns: tuple[BidWithCooldown, ...]
+    non_manageable_bids: tuple[UserBid, ...]
+    available_balance: AccountBalance
 
 
 @dataclass(frozen=True)
@@ -107,20 +109,13 @@ def _keep_most_flexible_largest_bid(b: BidWithCooldown) -> tuple[int, int]:
     return (locks, -remaining)
 
 
-@dataclass(frozen=True)
-class _GatheredInputs:
-    inputs: TargetHashrateInputs
-    non_manageable_bids: tuple[UserBid, ...]
-    available_balance: AccountBalance
-
-
 def _gather_inputs(
     client: HashpowerClient,
     ocean: OceanSource,
     address: BtcAddress,
     config: TargetHashrateConfig,
     now: datetime,
-) -> _GatheredInputs:
+) -> TargetHashrateInputs:
     ocean_24h = _ocean_24h(ocean, address)
     settings = client.get_market_settings()
     orderbook = client.get_orderbook()
@@ -128,22 +123,21 @@ def _gather_inputs(
     needed_hashrate = compute_needed_hashrate(config.target_hashrate, ocean_24h)
 
     current_bids = client.get_current_bids()
+    available_balance = client.get_account_balance()
     manageable_bids = tuple(b for b in current_bids if b.status in MANAGEABLE_STATUSES)
     non_manageable_bids = tuple(
         b for b in current_bids if b.status not in MANAGEABLE_STATUSES
     )
     bids_with_cooldowns = resolve_cooldowns(manageable_bids, settings, now, client)
 
-    return _GatheredInputs(
-        inputs=TargetHashrateInputs(
-            ocean_24h=ocean_24h,
-            target=config.target_hashrate,
-            needed_hashrate=needed_hashrate,
-            price=price,
-            bids_with_cooldowns=bids_with_cooldowns,
-        ),
+    return TargetHashrateInputs(
+        ocean_24h=ocean_24h,
+        target=config.target_hashrate,
+        needed_hashrate=needed_hashrate,
+        price=price,
+        bids_with_cooldowns=bids_with_cooldowns,
         non_manageable_bids=non_manageable_bids,
-        available_balance=client.get_account_balance(),
+        available_balance=available_balance,
     )
 
 
@@ -247,19 +241,19 @@ def set_bids_target(
     if now is None:
         now = datetime.now(UTC)
 
-    gathered = _gather_inputs(client, ocean, address, config, now)
-    plan = _plan_reconciliation(gathered.inputs, config)
+    inputs = _gather_inputs(client, ocean, address, config, now)
+    plan = _plan_reconciliation(inputs, config)
     balance_check = check_balance(
         plan=plan,
-        available_sats=gathered.available_balance.available_sat,
+        available_sats=inputs.available_balance.available_sat,
     )
     execution_result = _apply_plan(client, plan, dry_run)
 
     return SetBidsTargetResult(
-        inputs=gathered.inputs,
+        inputs=inputs,
         set_bids_result=SetBidsResult(
             plan=plan,
-            skipped_bids=gathered.non_manageable_bids,
+            skipped_bids=inputs.non_manageable_bids,
             balance_check=balance_check,
             execution=execution_result,
         ),

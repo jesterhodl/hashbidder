@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from hashbidder.clients.braiins import AccountBalance
 from hashbidder.domain.bid_config import TargetHashrateConfig
 from hashbidder.domain.bid_planning import CancelReason
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
@@ -37,6 +38,11 @@ def _config() -> TargetHashrateConfig:
     )
 
 
+_ZERO_BALANCE = AccountBalance(
+    available_sat=Sats(0), blocked_sat=Sats(0), total_sat=Sats(0)
+)
+
+
 def _inputs(
     *,
     needed: Hashrate = _DEFAULT_NEEDED,
@@ -49,6 +55,8 @@ def _inputs(
         needed_hashrate=needed,
         price=price,
         bids_with_cooldowns=bids_with_cooldowns,
+        non_manageable_bids=(),
+        available_balance=_ZERO_BALANCE,
     )
 
 
