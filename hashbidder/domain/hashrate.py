@@ -130,6 +130,29 @@ class Hashrate:
             time_unit=self.time_unit,
         )
 
+    def __mul__(self, scalar: Fraction) -> Hashrate:
+        if scalar < 0:
+            raise ValueError(f"Hashrate scalar must be non-negative, got {scalar}")
+        scaled = Fraction(self.value) * scalar
+        return Hashrate(
+            value=Decimal(scaled.numerator) / Decimal(scaled.denominator),
+            hash_unit=self.hash_unit,
+            time_unit=self.time_unit,
+        )
+
+    def __rmul__(self, scalar: Fraction) -> Hashrate:
+        return self.__mul__(scalar)
+
+    def __truediv__(self, scalar: Fraction) -> Hashrate:
+        if scalar <= 0:
+            raise ValueError(f"Hashrate divisor must be positive, got {scalar}")
+        scaled = Fraction(self.value) / scalar
+        return Hashrate(
+            value=Decimal(scaled.numerator) / Decimal(scaled.denominator),
+            hash_unit=self.hash_unit,
+            time_unit=self.time_unit,
+        )
+
     def __lt__(self, other: Hashrate) -> bool:
         return self._as_hashes_per_second() < other._as_hashes_per_second()
 

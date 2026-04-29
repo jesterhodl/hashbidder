@@ -9,7 +9,7 @@ from hashbidder.cli.formatting.bids import (
     format_set_bids_result,
 )
 from hashbidder.cli.formatting.target import format_set_bids_target_result_verbose
-from hashbidder.clients.braiins import BidStatus
+from hashbidder.clients.braiins import AccountBalance, BidStatus
 from hashbidder.domain.balance_check import BalanceCheck, BalanceStatus
 from hashbidder.domain.bid_planning import (
     CancelAction,
@@ -387,9 +387,13 @@ class TestFormatTargetHashrateVerbose:
         inputs = TargetHashrateInputs(
             ocean_24h=ph_s("5"),
             target=ph_s("10"),
-            needed=ph_s("15"),
-            price=HashratePrice(sats=Sats(801), per=PH_DAY),
+            needed_hashrate=ph_s("15"),
+            target_price=HashratePrice(sats=Sats(801), per=PH_DAY),
             bids_with_cooldowns=annotated,
+            non_manageable_bids=(),
+            available_balance=AccountBalance(
+                available_sat=Sats(0), blocked_sat=Sats(0), total_sat=Sats(0)
+            ),
         )
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
         return SetBidsTargetResult(

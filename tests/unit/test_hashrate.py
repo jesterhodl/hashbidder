@@ -1,6 +1,7 @@
 """Unit and property-based tests for hashrate domain types."""
 
 from decimal import Decimal
+from fractions import Fraction
 
 import pytest
 from hypothesis import assume, given, strategies
@@ -34,6 +35,25 @@ _negative_decimal = strategies.decimals(
 )
 _hash_unit = strategies.sampled_from(HashUnit)
 _time_unit = strategies.sampled_from(TimeUnit)
+
+
+@composite
+def positive_fractions(draw: DrawFn) -> Fraction:
+    """Strategy that generates strictly positive Fraction scalars."""
+    numerator = draw(strategies.integers(min_value=1, max_value=10**12))
+    denominator = draw(strategies.integers(min_value=1, max_value=10**12))
+    return Fraction(numerator, denominator)
+
+
+_negative_fraction = strategies.tuples(
+    strategies.integers(max_value=-1),
+    strategies.integers(min_value=1, max_value=10**6),
+).map(lambda t: Fraction(*t))
+
+_non_positive_fraction = strategies.one_of(
+    strategies.integers(max_value=0).map(Fraction),
+    _negative_fraction,
+)
 
 
 @composite
@@ -190,6 +210,101 @@ class TestHashrate:
         def test_addition_is_monotone(self, a: Hashrate, b: Hashrate) -> None:
             """Addition is monotone: a + b >= a since b is non-negative."""
             assert (a + b) >= a
+
+    class TestScaling:
+        """Tests for Hashrate multiplication and division by positive rationals."""
+
+        def test_mul_by_integer_fraction(self) -> None:
+            """Multiplying by Fraction(n) scales the value by n, preserving units."""
+            h = Hashrate(Decimal("3"), HashUnit.PH, TimeUnit.SECOND)
+            result = h * Fraction(4)
+            assert result.value == Decimal("12")
+            assert result.hash_unit == HashUnit.PH
+            assert result.time_unit == TimeUnit.SECOND
+
+        def test_mul_by_proper_fraction(self) -> None:
+            """Multiplying by Fraction(3, 2) scales by 1.5 exactly."""
+            h = Hashrate(Decimal("10"), HashUnit.TH, TimeUnit.SECOND)
+            result = h * Fraction(3, 2)
+            assert result.value == Decimal("15")
+
+        def test_rmul_matches_mul(self) -> None:
+            """Left-multiplying by a Fraction matches right-multiplying."""
+            h = Hashrate(Decimal("7"), HashUnit.GH, TimeUnit.SECOND)
+            assert Fraction(2, 3) * h == h * Fraction(2, 3)
+
+        def test_mul_by_one_is_identity(self) -> None:
+            """Multiplying by Fraction(1) returns an equal hashrate."""
+            h = Hashrate(Decimal("5"), HashUnit.EH, TimeUnit.DAY)
+            assert (h * Fraction(1)) == h
+
+        def test_div_by_integer_fraction(self) -> None:
+            """Dividing by Fraction(n) partitions the value into n equal parts."""
+            h = Hashrate(Decimal("12"), HashUnit.PH, TimeUnit.SECOND)
+            result = h / Fraction(4)
+            assert result.value == Decimal("3")
+            assert result.hash_unit == HashUnit.PH
+            assert result.time_unit == TimeUnit.SECOND
+
+        def test_div_by_proper_fraction(self) -> None:
+            """Dividing by Fraction(1, 2) doubles the value."""
+            h = Hashrate(Decimal("6"), HashUnit.TH, TimeUnit.SECOND)
+            result = h / Fraction(1, 2)
+            assert result.value == Decimal("12")
+
+        def test_mul_zero_hashrate(self) -> None:
+            """Scaling zero by any positive rational yields zero."""
+            h = Hashrate(Decimal("0"), HashUnit.PH, TimeUnit.SECOND)
+            assert (h * Fraction(5, 3)).value == Decimal("0")
+            assert (h / Fraction(5, 3)).value == Decimal("0")
+
+        @given(hashrates(), _negative_fraction)
+        def test_mul_by_negative_rejected(self, h: Hashrate, scalar: Fraction) -> None:
+            """Multiplying by any negative rational raises ValueError."""
+            with pytest.raises(ValueError, match="non-negative"):
+                h * scalar
+
+        @given(hashrates())
+        def test_mul_by_zero_yields_zero(self, h: Hashrate) -> None:
+            """Multiplying by zero yields a zero-valued hashrate."""
+            assert (h * Fraction(0)).value == Decimal(0)
+
+        @given(hashrates(), _non_positive_fraction)
+        def test_div_by_non_positive_rejected(
+            self, h: Hashrate, scalar: Fraction
+        ) -> None:
+            """Dividing by any non-positive rational raises ValueError."""
+            with pytest.raises(ValueError, match="positive"):
+                h / scalar
+
+        @given(hashrates(), positive_fractions())
+        def test_mul_div_roundtrip(self, h: Hashrate, scalar: Fraction) -> None:
+            """Multiplying then dividing by the same scalar recovers the original."""
+            roundtripped = (h * scalar) / scalar
+            assert _within_tolerance(
+                roundtripped._as_hashes_per_second(),
+                h._as_hashes_per_second(),
+            )
+
+        @given(hashrates(), positive_fractions())
+        def test_mul_scales_physical_magnitude(
+            self, h: Hashrate, scalar: Fraction
+        ) -> None:
+            """Multiplication scales the underlying H/s magnitude by the scalar."""
+            expected = Fraction(h._as_hashes_per_second()) * scalar
+            actual = Fraction((h * scalar)._as_hashes_per_second())
+            assert _within_tolerance(
+                Decimal(expected.numerator) / Decimal(expected.denominator),
+                Decimal(actual.numerator) / Decimal(actual.denominator),
+            )
+
+        @given(hashrates(), positive_fractions())
+        def test_div_is_inverse_of_mul(self, h: Hashrate, scalar: Fraction) -> None:
+            """Hashrate / scalar equals h * (1/scalar)."""
+            assert _within_tolerance(
+                (h / scalar)._as_hashes_per_second(),
+                (h * (Fraction(1) / scalar))._as_hashes_per_second(),
+            )
 
     class TestComparison:
         """Tests for Hashrate comparison operators across units."""
