@@ -406,32 +406,36 @@ def select_best_plan(
 
         # Compute the plan's effective served hashrate and the price-weighted
         # numerator in a single pass. Bids whose price is below the market
-        # target price won't be served — they contribute zero hashrate (and
-        # pay nothing), so they're skipped here entirely.
+        # target price won't be served — their speed is tracked separately in
+        # ``unserved_ph`` for the tiebreaker below.
         plan_ph = Decimal(0)  # PH/s of bids that will actually clear the market
+        unserved_ph = Decimal(0)  # PH/s of bids priced below the market
         weighted_price_numerator = Decimal(0)  # (sat/PH/Day) * (PH/s)
         for unchanged_bid in plan.unchanged:
-            if unchanged_bid.price < target_price:
-                continue
             speed = unchanged_bid.speed_limit_ph.to(HashUnit.PH, TimeUnit.SECOND).value
+            if unchanged_bid.price < target_price:
+                unserved_ph += speed
+                continue
             price = unchanged_bid.price.to(HashUnit.PH, TimeUnit.DAY).sats
             plan_ph += speed
             weighted_price_numerator += Decimal(int(price)) * speed
         for edit_action in plan.edits:
-            if edit_action.new_price < target_price:
-                continue
             speed = edit_action.new_speed_limit_ph.to(
                 HashUnit.PH, TimeUnit.SECOND
             ).value
+            if edit_action.new_price < target_price:
+                unserved_ph += speed
+                continue
             price = edit_action.new_price.to(HashUnit.PH, TimeUnit.DAY).sats
             plan_ph += speed
             weighted_price_numerator += Decimal(int(price)) * speed
         for create_action in plan.creates:
-            if create_action.config.price < target_price:
-                continue
             speed = create_action.config.speed_limit.to(
                 HashUnit.PH, TimeUnit.SECOND
             ).value
+            if create_action.config.price < target_price:
+                unserved_ph += speed
+                continue
             price = create_action.config.price.to(HashUnit.PH, TimeUnit.DAY).sats
             plan_ph += speed
             weighted_price_numerator += Decimal(int(price)) * speed
@@ -552,6 +556,14 @@ def select_best_plan(
         # both happen together makes this strictly worse than editing.
         if plan.cancels and plan.creates:
             plan_score -= Decimal(90_000_000)
+
+        # Tiebreaker: among otherwise-equal plans, prefer one whose unserved
+        # (below-market-price) speed roughly matches the served speed — i.e.
+        # the unserved pool sits ready to take over without being pumped past
+        # what we actually want online. Coefficient is deliberately tiny so
+        # this never outweighs any real term (deviation 1e8, cancel 1e7,
+        # bid-count 1e6, weighted price ~1e4, cooldowns ~1e4).
+        plan_score -= abs(unserved_ph - plan_ph)
 
         if best_score is None or plan_score > best_score:
             best_plan = plan

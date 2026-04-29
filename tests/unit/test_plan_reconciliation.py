@@ -309,20 +309,22 @@ class TestPlanReconciliationGoldenStubs:
         )
         assert _served_total_ph_s(plan, _DEFAULT_PRICE) == _ph_s("1")
 
-    def test_existing_bid_below_target_price_canceled(self) -> None:
-        """Bid priced below target_price (unserved) → canceled."""
-        # bid price = 400 sat/PH/Day = 400_000 sat/EH/Day, below target_price
-        # 501_000 → unserved. Both cooldowns → can't decrease into relevance.
-        # Edit-up to target_price is allowed (no cooldown blocks increases),
-        # but that creates a still-unserved (price equal) bid only if the
-        # edit hits target — verify the bid is at least not in unchanged.
+    def test_existing_bid_below_target_price_kept_as_standby(self) -> None:
+        """Bid priced below target_price (unserved) → kept as hot standby.
+
+        bid price = 400_000 sat/EH/Day, below target_price 501_000 → unserved.
+        Both cooldowns → can't decrease. The unserved-matches-served tiebreaker
+        prefers leaving the bid alongside a fresh served bid: the unserved
+        pool is ready to take over if the market drifts down to its price.
+        Verify the bid is not cancelled and the plan still serves needed.
+        """
         bid = _bwc("B1", 400, "5", price_cd=True, speed_cd=True)
         plan = _plan_reconciliation(
             _inputs(needed=_ph_s("5"), bids_with_cooldowns=(bid,)),
             _config_with_target("5"),
         )
-        # The unserved-as-is bid must not be left alone (it'd be dead weight).
-        assert all(u.id != bid.bid.id for u in plan.unchanged)
+        assert all(c.bid.id != bid.bid.id for c in plan.cancels)
+        assert _served_total_ph_s(plan, _DEFAULT_PRICE) == _ph_s("5")
 
     def test_misaligned_bid_no_cooldowns_converges_to_target(self) -> None:
         """Miscalibrated bid + no cooldowns → converges with no floor violations.
@@ -376,18 +378,20 @@ class TestPlanReconciliationGoldenStubs:
 class TestPlanReconciliationEdgeCasesStubs:
     """Boundary cases through the full pipeline."""
 
-    def test_locked_sub_target_bid_is_canceled(self) -> None:
-        """Bid pinned by both cooldowns at a price below target_price → cancel.
+    def test_locked_sub_target_bid_kept_as_standby(self) -> None:
+        """Bid pinned by both cooldowns at a price below target_price → kept.
 
-        The bid is unserved and locked from any decrease. Keeping it
-        unchanged would waste a bid-count slot for zero served hashrate.
+        The unserved-matches-served tiebreaker keeps the locked sub-target
+        bid as hot standby; the planner serves needed via a fresh bid at
+        target_price rather than cancelling working capacity.
         """
         bid = _bwc("B1", 400, "5", price_cd=True, speed_cd=True)
         plan = _plan_reconciliation(
             _inputs(needed=_ph_s("5"), bids_with_cooldowns=(bid,)),
             _config_with_target("5"),
         )
-        assert all(u.id != bid.bid.id for u in plan.unchanged)
+        assert all(c.bid.id != bid.bid.id for c in plan.cancels)
+        assert _served_total_ph_s(plan, _DEFAULT_PRICE) == _ph_s("5")
 
     def test_four_existing_bids_yields_cap_satisfying_plan(self) -> None:
         """4 manageable existing bids → planner picks a ≤3-bid plan.
