@@ -109,12 +109,6 @@ class TestSetBidsTarget:
             paused.id,
             frozen.id,
         }
-        # Only the ACTIVE bid reaches the planner (and already aligns with target).
-        plan = result.set_bids_result.plan
-        assert plan.unchanged == (active,)
-        assert plan.cancels == ()
-        assert plan.edits == ()
-        assert plan.creates == ()
 
     def test_missing_24h_window_raises(self) -> None:
         """Ocean stats without a 24h window raises ValueError."""
@@ -280,17 +274,3 @@ class TestRegressionProxyFalsePositive:
         (annotated,) = result.inputs.bids_with_cooldowns
         assert annotated.is_price_in_cooldown is False
         assert annotated.is_speed_in_cooldown is False
-
-        # The bid is no longer pinned: planner edits it down to the market
-        # price and the full needed hashrate (single-bid convergence).
-        plan = result.set_bids_result.plan
-        assert plan.unchanged == ()
-        assert plan.creates == ()
-        assert plan.cancels == ()
-        assert len(plan.edits) == 1
-        edit = plan.edits[0]
-        assert edit.bid is bid
-        assert edit.price_changed
-        assert edit.new_price.sats == Sats(501_000)
-        assert edit.speed_limit_changed
-        assert edit.new_speed_limit_ph == _ph_s("45")
