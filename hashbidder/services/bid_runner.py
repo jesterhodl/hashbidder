@@ -18,7 +18,6 @@ from hashbidder.clients.braiins import (
     HashpowerClient,
     UserBid,
 )
-from hashbidder.domain.balance_check import BalanceCheck, BalanceStatus, check_balance
 from hashbidder.domain.bid_config import SetBidsConfig
 from hashbidder.domain.bid_planning import (
     MANAGEABLE_STATUSES,
@@ -39,14 +38,12 @@ POST_EXECUTE_REFETCH_DELAY_SECONDS = 3.0
 class SetBidsResult:
     """Result of a set-bids run.
 
-    `execution` is None for a dry run or when the balance check aborted
-    the run; otherwise it holds the outcomes and the final bid state
-    read back after the engine ran.
+    `execution` is None for a dry run; otherwise it holds the outcomes
+    and the final bid state read back after the engine ran.
     """
 
     plan: ReconciliationPlan
     skipped_bids: tuple[UserBid, ...]
-    balance_check: BalanceCheck
     execution: "ExecutionResult | None" = None
 
 
@@ -55,27 +52,16 @@ def reconcile(
 ) -> SetBidsResult:
     """Bring live bids in line with `config`.
 
-    Reads current bids, plans the diff, checks the account balance, and
-    (unless `dry_run` or the balance is insufficient) executes the plan
-    against the API. An `INSUFFICIENT` balance aborts the run entirely:
-    no cancels, edits, or creates are executed.
+    Reads current bids, plans the diff, and (unless `dry_run`) executes
+    the plan against the API.
     """
     current_bids = client.get_current_bids()
     plan = plan_bid_changes(config, current_bids)
     skipped = tuple(b for b in current_bids if b.status not in MANAGEABLE_STATUSES)
-    balance = client.get_account_balance()
-    balance_result = check_balance(plan, balance.available_sat)
-    if dry_run or balance_result.status == BalanceStatus.INSUFFICIENT:
-        return SetBidsResult(
-            plan=plan, skipped_bids=skipped, balance_check=balance_result
-        )
+    if dry_run:
+        return SetBidsResult(plan=plan, skipped_bids=skipped)
     execution = execute_plan(client, plan)
-    return SetBidsResult(
-        plan=plan,
-        skipped_bids=skipped,
-        balance_check=balance_result,
-        execution=execution,
-    )
+    return SetBidsResult(plan=plan, skipped_bids=skipped, execution=execution)
 
 
 class ActionStatus(Enum):

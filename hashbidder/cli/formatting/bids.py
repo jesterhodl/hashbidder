@@ -1,17 +1,9 @@
-"""Formatters for reconciliation plans, execution outcomes, and balance checks."""
+"""Formatters for reconciliation plans and execution outcomes."""
 
 from __future__ import annotations
 
-from datetime import timedelta
-from decimal import Decimal
-
 from hashbidder.cli.formatting._common import fmt_speed, to_ph_day
 from hashbidder.clients.braiins import UserBid
-from hashbidder.domain.balance_check import (
-    LOW_BALANCE_RUNWAY,
-    BalanceCheck,
-    BalanceStatus,
-)
 from hashbidder.domain.bid_planning import (
     CancelAction,
     CancelReason,
@@ -241,57 +233,18 @@ def format_current_bids(bids: tuple[UserBid, ...]) -> str:
     return "\n".join(lines)
 
 
-def _fmt_runway(runway: timedelta) -> str:
-    if runway == timedelta.max:
-        return "∞"
-    hours = Decimal(runway.total_seconds()) / Decimal(3600)
-    return f"{hours:.1f}h"
-
-
-def format_balance_check(check: BalanceCheck) -> str:
-    """Render the balance check result as a human-readable section."""
-    threshold_hours = int(LOW_BALANCE_RUNWAY.total_seconds() // 3600)
-    burn_rate_per_hour = check.burn_rate.to(timedelta(hours=1)).amount
-    lines = [
-        "=== Account Balance ===",
-        f"  Available:  {int(check.available_sat):,} sat",
-        f"  Required:   {int(check.required_sat):,} sat",
-        f"  Burn rate:  {burn_rate_per_hour:,.0f} sat/hour",
-        f"  Runway:     {_fmt_runway(check.runway)}",
-    ]
-    if check.status == BalanceStatus.INSUFFICIENT:
-        lines.append("  Status:     INSUFFICIENT — execution aborted")
-    elif check.status == BalanceStatus.LOW:
-        lines.append(f"  Status:     LOW — runway under {threshold_hours}h")
-    else:
-        lines.append("  Status:     SUFFICIENT")
-    return "\n".join(lines)
-
-
 def format_set_bids_result(result: SetBidsResult) -> str:
-    """Render a complete set-bids run (dry run, aborted, or executed)."""
+    """Render a complete set-bids run (dry run or executed)."""
     plan = result.plan
     has_changes = bool(plan.edits or plan.creates or plan.cancels)
-    balance_section = format_balance_check(result.balance_check)
-
-    if result.balance_check.status == BalanceStatus.INSUFFICIENT:
-        return "\n".join(
-            [
-                balance_section,
-                "",
-                "Execution aborted: insufficient balance to fund planned creates.",
-                "",
-                format_plan(plan, result.skipped_bids),
-            ]
-        )
 
     if result.execution is None:
-        return "\n".join([balance_section, "", format_plan(plan, result.skipped_bids)])
+        return format_plan(plan, result.skipped_bids)
 
     if not has_changes:
-        return "\n".join([balance_section, "", "No changes needed."])
+        return "No changes needed."
 
-    sections = [balance_section, "", "=== Executing Changes ==="]
+    sections = ["=== Executing Changes ==="]
     sections.extend(format_outcome(o) for o in result.execution.outcomes)
     sections.append("")
     sections.append("=== Results ===")

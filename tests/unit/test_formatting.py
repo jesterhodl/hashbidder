@@ -1,16 +1,11 @@
 """Tests for dry-run output formatting."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from hashbidder.cli.formatting.bids import (
-    format_balance_check,
-    format_plan,
-    format_set_bids_result,
-)
+from hashbidder.cli.formatting.bids import format_plan
 from hashbidder.cli.formatting.target import format_set_bids_target_result_verbose
-from hashbidder.clients.braiins import AccountBalance, BidStatus
-from hashbidder.domain.balance_check import BalanceCheck, BalanceStatus
+from hashbidder.clients.braiins import BidStatus
 from hashbidder.domain.bid_planning import (
     CancelAction,
     CancelReason,
@@ -20,7 +15,6 @@ from hashbidder.domain.bid_planning import (
 )
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
-from hashbidder.domain.sats_burn_rate import SatsBurnRate
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.services.bid_runner import SetBidsResult
 from hashbidder.services.target_hashrate import BidWithCooldown
@@ -30,7 +24,6 @@ from hashbidder.use_cases.set_bids_target import (
 )
 from tests.conftest import (
     PH_DAY,
-    SUFFICIENT_BALANCE_CHECK,
     UPSTREAM,
     make_bid_config,
     make_user_bid,
@@ -271,112 +264,6 @@ class TestFormatPlan:
         assert "No active bids." in output
 
 
-def _make_balance_check(
-    status: BalanceStatus,
-    *,
-    required: int = 100_000,
-    available: int = 1_000_000_000,
-    burn_rate_sat_per_day: int = 216_000_000,
-    runway: timedelta = timedelta(hours=100),
-) -> BalanceCheck:
-    return BalanceCheck(
-        required_sat=Sats(required),
-        available_sat=Sats(available),
-        burn_rate=SatsBurnRate(Decimal(burn_rate_sat_per_day), timedelta(days=1)),
-        runway=runway,
-        status=status,
-    )
-
-
-class TestFormatBalanceCheck:
-    """Tests for format_balance_check."""
-
-    def test_sufficient(self) -> None:
-        """A sufficient balance renders status SUFFICIENT."""
-        output = format_balance_check(_make_balance_check(BalanceStatus.SUFFICIENT))
-        assert "=== Account Balance ===" in output
-        assert "Available:  1,000,000,000 sat" in output
-        assert "Required:   100,000 sat" in output
-        assert "9,000,000 sat/hour" in output
-        assert "Runway:     100.0h" in output
-        assert "Status:     SUFFICIENT" in output
-
-    def test_low(self) -> None:
-        """A LOW status mentions the runway threshold."""
-        output = format_balance_check(
-            _make_balance_check(BalanceStatus.LOW, runway=timedelta(hours=50))
-        )
-        assert "Runway:     50.0h" in output
-        assert "LOW" in output
-        assert "72h" in output
-
-    def test_insufficient(self) -> None:
-        """An INSUFFICIENT status notes the execution will be aborted."""
-        output = format_balance_check(
-            _make_balance_check(BalanceStatus.INSUFFICIENT, available=10)
-        )
-        assert "INSUFFICIENT" in output
-        assert "aborted" in output
-
-    def test_infinite_runway(self) -> None:
-        """A zero burn rate renders as infinite runway."""
-        check = BalanceCheck(
-            required_sat=Sats(0),
-            available_sat=Sats(500),
-            burn_rate=SatsBurnRate.zero(),
-            runway=timedelta.max,
-            status=BalanceStatus.SUFFICIENT,
-        )
-        output = format_balance_check(check)
-        assert "Runway:     \u221e" in output
-        assert "0 sat/hour" in output
-
-
-class TestFormatSetBidsResult:
-    """Tests for format_set_bids_result with balance-check wiring."""
-
-    def _plan_with_one_create(self) -> ReconciliationPlan:
-        return ReconciliationPlan(
-            edits=(),
-            creates=(
-                CreateAction(
-                    config=make_bid_config(500, "5.0"),
-                    amount=Sats(100_000),
-                    upstream=UPSTREAM,
-                ),
-            ),
-            cancels=(),
-            unchanged=(),
-        )
-
-    def test_dry_run_includes_balance_section(self) -> None:
-        """A dry run renders the balance section before the plan."""
-        result = SetBidsResult(
-            plan=self._plan_with_one_create(),
-            skipped_bids=(),
-            balance_check=_make_balance_check(BalanceStatus.SUFFICIENT),
-            execution=None,
-        )
-        output = format_set_bids_result(result)
-        assert "=== Account Balance ===" in output
-        assert "=== Changes ===" in output
-        assert output.index("=== Account Balance ===") < output.index("=== Changes ===")
-
-    def test_insufficient_aborted_run(self) -> None:
-        """An aborted run shows the balance section, abort notice, and plan."""
-        result = SetBidsResult(
-            plan=self._plan_with_one_create(),
-            skipped_bids=(),
-            balance_check=_make_balance_check(BalanceStatus.INSUFFICIENT, available=10),
-            execution=None,
-        )
-        output = format_set_bids_result(result)
-        assert "INSUFFICIENT" in output
-        assert "Execution aborted" in output
-        # The plan is still shown so the user sees what would have happened.
-        assert "=== Changes ===" in output
-
-
 class TestFormatTargetHashrateVerbose:
     """Tests for format_set_bids_target_result_verbose."""
 
@@ -391,9 +278,6 @@ class TestFormatTargetHashrateVerbose:
             target_price=HashratePrice(sats=Sats(801), per=PH_DAY),
             bids_with_cooldowns=annotated,
             non_manageable_bids=(),
-            available_balance=AccountBalance(
-                available_sat=Sats(0), blocked_sat=Sats(0), total_sat=Sats(0)
-            ),
         )
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
         return SetBidsTargetResult(
@@ -401,7 +285,6 @@ class TestFormatTargetHashrateVerbose:
             set_bids_result=SetBidsResult(
                 plan=plan,
                 skipped_bids=(),
-                balance_check=SUFFICIENT_BALANCE_CHECK,
                 execution=None,
             ),
         )

@@ -7,14 +7,12 @@ from fractions import Fraction
 from itertools import product
 
 from hashbidder.clients.braiins import (
-    AccountBalance,
     ApiError,
     HashpowerClient,
     MarketSettings,
     UserBid,
 )
 from hashbidder.clients.ocean import OceanSource, OceanTimeWindow
-from hashbidder.domain.balance_check import check_balance
 from hashbidder.domain.bid_config import (
     MIN_BID_SPEED_LIMIT,
     BidConfig,
@@ -68,7 +66,6 @@ class TargetHashrateInputs:
     target_price: HashratePrice
     bids_with_cooldowns: tuple[BidWithCooldown, ...]
     non_manageable_bids: tuple[UserBid, ...]
-    available_balance: AccountBalance
 
 
 @dataclass(frozen=True)
@@ -143,7 +140,6 @@ def _gather_inputs(
     needed_hashrate = compute_needed_hashrate(config.target_hashrate, ocean_24h)
 
     current_bids = client.get_current_bids()
-    available_balance = client.get_account_balance()
     manageable_bids = tuple(b for b in current_bids if b.status in MANAGEABLE_STATUSES)
     non_manageable_bids = tuple(
         b for b in current_bids if b.status not in MANAGEABLE_STATUSES
@@ -157,7 +153,6 @@ def _gather_inputs(
         target_price=price,
         bids_with_cooldowns=bids_with_cooldowns,
         non_manageable_bids=non_manageable_bids,
-        available_balance=available_balance,
     )
 
 
@@ -616,8 +611,8 @@ def set_bids_target(
     """Plan reconciliation to drive the 24h Ocean hashrate toward target.
 
     Three phases:
-        1. Gather inputs: read Ocean 24h, market settings, orderbook, current
-           bids (with per-bid cooldown annotations), and the account balance.
+        1. Gather inputs: read Ocean 24h, market settings, orderbook, and
+           current bids (with per-bid cooldown annotations).
         2. Plan: enumerate every candidate plan via ``craft_all_possible_plans``
            (cartesian product over per-bid dispositions and a single creation
            slot, with cooldowns gating decreases) and pick the highest-scoring
@@ -631,10 +626,6 @@ def set_bids_target(
 
     inputs = _gather_inputs(client, ocean, address, config, now)
     plan = _plan_reconciliation(inputs, config)
-    balance_check = check_balance(
-        plan=plan,
-        available_sats=inputs.available_balance.available_sat,
-    )
     execution_result = _apply_plan(client, plan, dry_run)
 
     return SetBidsTargetResult(
@@ -642,7 +633,6 @@ def set_bids_target(
         set_bids_result=SetBidsResult(
             plan=plan,
             skipped_bids=inputs.non_manageable_bids,
-            balance_check=balance_check,
             execution=execution_result,
         ),
     )
