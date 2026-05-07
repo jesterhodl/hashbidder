@@ -4,9 +4,9 @@ hashbidder is a small tool to manage bidding in [Braiins Hashpower](https://acad
 
 ## Disclaimers
 
-hashbidder is severely under-tested and most probably has bugs. If used against the actual Braiins Hashpower market, it's going to use your money in a real market, and thus you can end up spending money in a way you don't want. You use hashbidder under at your own risk.
+hashbidder is severely under-tested and most probably has bugs. If used against the actual Braiins Hashpower market, it's going to use your money in a real market, and thus you can end up spending money in a way you don't want. You use hashbidder under at your own risk. Having said that, I do run it with my own money.
 
-hashbidder is currently overfit for someone who is mining at [OCEAN Pool](https://ocean.xyz/) running their own [DATUM gateway](https://github.com/OCEAN-xyz/datum_gateway). If your profile is different, parts of this tool might be awkward or not useful at all.
+hashbidder is currently overfit for someone who is mining at [OCEAN Pool](https://ocean.xyz/) running their own [DATUM gateway](https://github.com/OCEAN-xyz/datum_gateway). If your profile is different, parts of this tool might be awkward or not useful at all. Also, if you're mining somewhere that's not OCEAN and not using DATUM, you may want to assess why not move there.
 
 ## Prerequisites
 
@@ -70,17 +70,14 @@ Declare a target hashrate and a max number of bids. hashbidder reads your curren
 mode = "target-hashrate"
 
 # Orders will be created with this budget. If you'll be running hashbidder frequently,
-# since any order that gets completed will be quickly replaced by a new one.
+# you can set this quite low since any order that gets completed will be quickly replaced 
+# by a new one.
 default_amount_sat = 100000
 
 # Your goal
 target_hashrate_ph_s = 5.0
 
-# How many bids you want to place in parallel at most. Why have multiple? Multiple 
-# bids let hashbidder better deal with Braiins cooldown periods (see https://academy.braiins.com/en/braiins-hashpower/faqs/trading/?Pages_en%5Bquery%5D=cooldow#what-is-the-overbid-feature)
-# If you will run this every 10 minutes, I would suggest to start with 5. If you will run less frequently, you can get away with less.
-max_bids_count = 5
-
+# Your DATUM stratum endpoint
 [upstream]
 url = "stratum+tcp://203.0.113.10:23334"
 identity = "brains.worker"
